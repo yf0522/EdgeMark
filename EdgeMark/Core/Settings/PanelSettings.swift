@@ -122,9 +122,14 @@ final class PanelSettings {
         didSet { UserDefaults.standard.set(swipeGestureSensitivity, forKey: swipeGestureSensitivityKey) }
     }
 
-    /// Width of the side panel in points. 400 = default minimum.
+    /// Width of the floating panel in points.
     var panelWidth: CGFloat {
         didSet { UserDefaults.standard.set(Double(panelWidth), forKey: panelWidthKey) }
+    }
+
+    /// Preferred floating panel height. Runtime geometry caps this at 80% of the screen.
+    var panelHeight: CGFloat {
+        didSet { UserDefaults.standard.set(Double(panelHeight), forKey: panelHeightKey) }
     }
 
     /// Panel show/hide animation style.
@@ -147,6 +152,7 @@ final class PanelSettings {
     private let editorSwipeToNavigateEnabledKey = "editorSwipeToNavigateEnabled"
     private let swipeGestureSensitivityKey = "swipeGestureSensitivity"
     private let panelWidthKey = "panelWidth"
+    private let panelHeightKey = "panelHeight"
     private let animationStyleKey = "animationStyle"
 
     // MARK: - Init
@@ -187,9 +193,12 @@ final class PanelSettings {
             animationStyle = .slide
         }
 
-        // Panel width (stored as Double since UserDefaults doesn't have CGFloat)
+        // Floating panel dimensions (stored as Double since UserDefaults doesn't have CGFloat).
         let savedWidth = UserDefaults.standard.object(forKey: panelWidthKey) as? Double
-        panelWidth = savedWidth.map { CGFloat($0) } ?? 400
+        panelWidth = savedWidth.map { CGFloat($0) } ?? 440
+
+        let savedHeight = UserDefaults.standard.object(forKey: panelHeightKey) as? Double
+        panelHeight = savedHeight.map { CGFloat($0) } ?? 720
     }
 }
 
