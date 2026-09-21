@@ -10,6 +10,9 @@ struct ClipboardHistoryView: View {
     @State private var showClearConfirmation = false
     @State private var copiedItemID: UUID?
     @State private var memoCreatedItemID: UUID?
+    @State private var selectedItemID: UUID?
+    @FocusState private var historyFocused: Bool
+    @FocusState private var searchFocused: Bool
 
     private enum ClipboardFilter: String, CaseIterable, Identifiable {
         case all = "全部"
@@ -79,28 +82,46 @@ struct ClipboardHistoryView: View {
                 if filteredItems.isEmpty {
                     emptyState
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(filteredItems) { item in
-                                ClipboardHistoryRow(
-                                    item: item,
-                                    image: item.kind == .image ? store.thumbnail(for: item) : nil,
-                                    copied: copiedItemID == item.id,
-                                    memoCreated: memoCreatedItemID == item.id,
-                                    onCopy: { copy(item) },
-                                    onCreateMemo: { createMemo(from: item) },
-                                    onTogglePin: { store.togglePin(item) },
-                                    onToggleFavorite: { store.toggleFavorite(item) },
-                                    onDelete: { store.delete(item) },
-                                )
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(filteredItems) { item in
+                                    ClipboardHistoryRow(
+                                        item: item,
+                                        image: item.kind == .image ? store.thumbnail(for: item) : nil,
+                                        copied: copiedItemID == item.id,
+                                        memoCreated: memoCreatedItemID == item.id,
+                                        isSelected: selectedItemID == item.id,
+                                        onCopy: {
+                                            select(item)
+                                            copy(item)
+                                        },
+                                        onPaste: {
+                                            select(item)
+                                            paste(item)
+                                        },
+                                        onCreateMemo: { createMemo(from: item) },
+                                        onTogglePin: { store.togglePin(item) },
+                                        onToggleFavorite: { store.toggleFavorite(item) },
+                                        onDelete: { store.delete(item) },
+                                    )
+                                    .id(item.id)
 
-                                if item.id != filteredItems.last?.id {
-                                    Divider()
-                                        .padding(.leading, 44)
+                                    if item.id != filteredItems.last?.id {
+                                        Divider()
+                                            .padding(.leading, 52)
+                                            .padding(.trailing, 10)
+                                    }
                                 }
                             }
+                            .padding(.vertical, 5)
                         }
-                        .padding(.vertical, 4)
+                        .onChange(of: selectedItemID) { _, newID in
+                            guard let newID else { return }
+                            withAnimation(.easeInOut(duration: 0.12)) {
+                                proxy.scrollTo(newID, anchor: .center)
+                            }
+                        }
                     }
                 }
 
@@ -109,6 +130,35 @@ struct ClipboardHistoryView: View {
 
                 footer
             }
+        }
+        .focusable()
+        .focused($historyFocused)
+        .onAppear {
+            resetSelection()
+            DispatchQueue.main.async {
+                historyFocused = true
+            }
+        }
+        .onChange(of: selectedFilter) { _, _ in
+            resetSelection()
+        }
+        .onChange(of: query) { _, _ in
+            resetSelection()
+        }
+        .onKeyPress(.upArrow) {
+            guard !searchFocused else { return .ignored }
+            moveSelection(-1)
+            return .handled
+        }
+        .onKeyPress(.downArrow) {
+            guard !searchFocused else { return .ignored }
+            moveSelection(1)
+            return .handled
+        }
+        .onKeyPress(.return) {
+            guard !searchFocused else { return .ignored }
+            pasteSelectedItem()
+            return .handled
         }
         .alert("清空剪贴板历史？", isPresented: $showClearConfirmation) {
             Button("取消", role: .cancel) {}
@@ -163,6 +213,7 @@ struct ClipboardHistoryView: View {
 
             TextField("搜索剪贴板", text: $query)
                 .textFieldStyle(.plain)
+                .focused($searchFocused)
 
             if !query.isEmpty {
                 Button {
@@ -237,6 +288,10 @@ struct ClipboardHistoryView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            Text("单击复制 · 双击/Enter 粘贴")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
             if store.sensitiveFilteringEnabled {
                 Label("隐私过滤", systemImage: "shield")
                     .font(.caption2)
@@ -259,6 +314,12 @@ struct ClipboardHistoryView: View {
         .padding(.vertical, 7)
     }
 
+    private func select(_ item: ClipboardHistoryItem) {
+        selectedItemID = item.id
+        searchFocused = false
+        historyFocused = true
+    }
+
     private func copy(_ item: ClipboardHistoryItem) {
         store.copy(item)
         copiedItemID = item.id
@@ -269,6 +330,53 @@ struct ClipboardHistoryView: View {
                 copiedItemID = nil
             }
         }
+    }
+
+    private func paste(_ item: ClipboardHistoryItem) {
+        guard let panelController = AppDelegate.shared?.panelController else {
+            copy(item)
+            return
+        }
+        _ = panelController.pasteClipboardItem(item)
+    }
+
+    private func moveSelection(_ offset: Int) {
+        guard !filteredItems.isEmpty else {
+            selectedItemID = nil
+            return
+        }
+
+        guard let selectedItemID,
+              let index = filteredItems.firstIndex(where: { $0.id == selectedItemID })
+        else {
+            self.selectedItemID = offset >= 0 ? filteredItems.first?.id : filteredItems.last?.id
+            return
+        }
+
+        let nextIndex = min(max(index + offset, 0), filteredItems.count - 1)
+        self.selectedItemID = filteredItems[nextIndex].id
+    }
+
+    private func pasteSelectedItem() {
+        guard !searchFocused else { return }
+
+        if let selectedItemID,
+           let item = filteredItems.first(where: { $0.id == selectedItemID })
+        {
+            paste(item)
+        } else if let item = filteredItems.first {
+            select(item)
+            paste(item)
+        }
+    }
+
+    private func resetSelection() {
+        if let selectedItemID,
+           filteredItems.contains(where: { $0.id == selectedItemID })
+        {
+            return
+        }
+        selectedItemID = filteredItems.first?.id
     }
 
     private func createMemo(from item: ClipboardHistoryItem) {
@@ -290,7 +398,9 @@ private struct ClipboardHistoryRow: View {
     let image: NSImage?
     let copied: Bool
     let memoCreated: Bool
+    let isSelected: Bool
     let onCopy: () -> Void
+    let onPaste: () -> Void
     let onCreateMemo: () -> Void
     let onTogglePin: () -> Void
     let onToggleFavorite: () -> Void
@@ -342,11 +452,41 @@ private struct ClipboardHistoryRow: View {
                 .help(item.isPinned ? "取消置顶" : "置顶")
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .padding(.vertical, 10)
+        .background {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(
+                    isSelected
+                        ? Color.accentColor.opacity(0.14)
+                        : Color.primary.opacity(0.018),
+                )
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .strokeBorder(
+                    isSelected
+                        ? Color.accentColor.opacity(0.24)
+                        : Color.primary.opacity(0.035),
+                    lineWidth: 1,
+                )
+        }
+        .padding(.horizontal, 8)
         .contentShape(Rectangle())
-        .onTapGesture(perform: onCopy)
+        .gesture(
+            TapGesture(count: 2)
+                .exclusively(before: TapGesture(count: 1))
+                .onEnded { value in
+                    switch value {
+                    case .first:
+                        onPaste()
+                    case .second:
+                        onCopy()
+                    }
+                },
+        )
         .contextMenu {
+            Button("直接粘贴", systemImage: "doc.on.clipboard", action: onPaste)
             Button("复制", systemImage: "doc.on.doc", action: onCopy)
             Button("转为备忘录", systemImage: "note.text.badge.plus", action: onCreateMemo)
 
@@ -373,7 +513,7 @@ private struct ClipboardHistoryRow: View {
 
             Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
         }
-        .help("点击复制，右键可转为备忘录")
+        .help("单击复制 · 双击直接粘贴 · Enter 粘贴")
     }
 
     @ViewBuilder
