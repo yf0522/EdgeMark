@@ -135,7 +135,7 @@ struct ClipboardHistoryView: View {
                 systemName: "camera.viewfinder",
                 help: "区域截图"
             ) {
-                ShortcutManager.shared.captureScreenshot()
+                AppDelegate.shared?.panelController?.captureScreenshot()
             }
 
             HeaderIconButton(
