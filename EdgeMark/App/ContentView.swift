@@ -89,6 +89,21 @@ struct ContentView: View {
                     .zIndex(1)
             }
         }
+        .background {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.055, green: 0.065, blue: 0.09),
+                    Color(red: 0.09, green: 0.11, blue: 0.16),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing,
+            )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(.white.opacity(0.06), lineWidth: 1)
+        }
         .clipped()
         .animation(.easeInOut(duration: 0.2), value: noteStore.copiedPathsCount)
         .animation(.easeInOut(duration: 0.2), value: navigation.section)
@@ -122,5 +137,5 @@ struct ContentView: View {
         .environment(AppSettings.shared)
         .environment(L10n.shared)
         .environment(PeekCoordinator())
-        .frame(width: 400, height: 600)
+        .frame(width: 440, height: 720)
 }
