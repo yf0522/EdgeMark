@@ -287,5 +287,6 @@
   "settings.clipboard.historyUsage": "History items",
   "settings.clipboard.imageUsage": "Image cache",
   "settings.clipboard.imageUsageValue": "{0} images · {1}",
-  "settings.clipboard.cleanupNow": "Clean Up Now"
+  "settings.clipboard.cleanupNow": "Clean Up Now",
+  "settings.panelTint.midnight": "Midnight"
 }
