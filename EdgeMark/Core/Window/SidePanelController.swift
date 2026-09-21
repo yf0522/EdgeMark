@@ -172,6 +172,26 @@ final class SidePanelController: NSWindowController {
             return event
         }
 
+        // Fast section switching: ⌘1 = memo, ⌘2 = clipboard.
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, isShown else { return event }
+            let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+            guard modifiers == .command else { return event }
+
+            switch event.keyCode {
+            case 18: // 1
+                AppNavigation.shared.showMemo()
+                return nil
+            case 19: // 2
+                AppNavigation.shared.showClipboard()
+                peekCoordinator.dismissNow()
+                noteStore.clearSelection()
+                return nil
+            default:
+                return event
+            }
+        }
+
         // List keyboard navigation: ↑ / ↓ / ⇧↑ / ⇧↓ / Return.
         // Runs before any SwiftUI .onKeyPress so it wins over default focus traversal.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
