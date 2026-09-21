@@ -287,5 +287,6 @@
   "settings.clipboard.historyUsage": "इतिहास रिकॉर्ड",
   "settings.clipboard.imageUsage": "चित्र कैश",
   "settings.clipboard.imageUsageValue": "{0} चित्र · {1}",
-  "settings.clipboard.cleanupNow": "अभी साफ़ करें"
+  "settings.clipboard.cleanupNow": "अभी साफ़ करें",
+  "settings.panelTint.midnight": "मिडनाइट"
 }
