@@ -615,6 +615,17 @@ final class SidePanelController: NSWindowController {
         }
     }
 
+    func captureScreenshot() {
+        if isShown {
+            hidePanel(restoreFocus: false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                ShortcutManager.shared.captureScreenshot()
+            }
+        } else {
+            ShortcutManager.shared.captureScreenshot()
+        }
+    }
+
     // MARK: - Resize
 
     private func panelDidResize(to newWidth: CGFloat) {
