@@ -63,6 +63,10 @@ final class ShortcutSettings {
         didSet { save(shortcut: openClipboardShortcut, forKey: openClipboardKey) }
     }
 
+    var captureScreenshotShortcut: KeyboardShortcut? {
+        didSet { save(shortcut: captureScreenshotShortcut, forKey: captureScreenshotKey) }
+    }
+
     var newNoteShortcut: KeyboardShortcut? {
         didSet { save(shortcut: newNoteShortcut, forKey: newNoteKey) }
     }
@@ -97,6 +101,10 @@ final class ShortcutSettings {
         keyCode: UInt16(kVK_ANSI_V),
         modifiers: UInt32(controlKey | shiftKey)
     )
+    static let defaultCaptureScreenshot = KeyboardShortcut(
+        keyCode: UInt16(kVK_ANSI_S),
+        modifiers: UInt32(controlKey | shiftKey)
+    )
     static let defaultNewNote = KeyboardShortcut(keyCode: UInt16(kVK_ANSI_N), modifiers: UInt32(cmdKey))
     static let defaultNewFolder = KeyboardShortcut(keyCode: UInt16(kVK_ANSI_N), modifiers: UInt32(cmdKey | shiftKey))
     static let defaultSearch = KeyboardShortcut(keyCode: UInt16(kVK_ANSI_F), modifiers: UInt32(cmdKey))
@@ -113,6 +121,7 @@ final class ShortcutSettings {
         let configurable: [(String, KeyboardShortcut?)] = [
             ("settings.keyboard.togglePanel", togglePanelShortcut),
             ("settings.keyboard.openClipboard", openClipboardShortcut),
+            ("settings.keyboard.captureScreenshot", captureScreenshotShortcut),
             ("settings.keyboard.newNote", newNoteShortcut),
             ("settings.keyboard.newFolder", newFolderShortcut),
             ("settings.keyboard.search", searchShortcut),
@@ -153,6 +162,7 @@ final class ShortcutSettings {
 
     private let togglePanelKey = "togglePanelShortcut"
     private let openClipboardKey = "openClipboardShortcut"
+    private let captureScreenshotKey = "captureScreenshotShortcut"
     private let newNoteKey = "newNoteShortcut"
     private let newFolderKey = "newFolderShortcut"
     private let searchKey = "searchShortcut"
@@ -181,6 +191,7 @@ final class ShortcutSettings {
         let toggleDefault = KeyboardShortcut(keyCode: UInt16(kVK_Space), modifiers: UInt32(controlKey | shiftKey))
         togglePanelShortcut = load(forKey: togglePanelKey, default: toggleDefault)
         openClipboardShortcut = load(forKey: openClipboardKey, default: Self.defaultOpenClipboard)
+        captureScreenshotShortcut = load(forKey: captureScreenshotKey, default: Self.defaultCaptureScreenshot)
     }
 
     private func loadLocalShortcuts() {
