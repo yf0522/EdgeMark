@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Toolbar icon with hover background animation.
+/// Compact toolbar icon with a soft accent hover treatment.
 struct HeaderIconButton: View {
     let systemName: String
     let help: String
@@ -11,14 +11,23 @@ struct HeaderIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(isHovered ? .primary : .secondary)
-                .frame(width: 28, height: 28)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(isHovered ? Color.accentColor : .secondary)
+                .frame(width: 30, height: 30)
                 .background {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(.primary.opacity(isHovered ? 0.1 : 0))
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(
+                            isHovered
+                                ? Color.accentColor.opacity(0.16)
+                                : Color.primary.opacity(0.025),
+                        )
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(.primary.opacity(isHovered ? 0.10 : 0.05), lineWidth: 1)
                 }
                 .contentShape(Rectangle())
+                .scaleEffect(isHovered ? 1.04 : 1)
         }
         .buttonStyle(.plain)
         .help(help)
