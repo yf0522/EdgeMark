@@ -19,6 +19,7 @@ final class AppSettings {
 
     enum PanelTint: String, CaseIterable {
         case system
+        case midnight
         case graphite
         case slate
         case sand
@@ -29,6 +30,7 @@ final class AppSettings {
         var color: NSColor? {
             switch self {
             case .system: nil
+            case .midnight: NSColor(red: 0.09, green: 0.12, blue: 0.18, alpha: 0.62)
             case .graphite: NSColor(white: 0.4, alpha: 0.18)
             case .slate: NSColor(red: 0.40, green: 0.50, blue: 0.62, alpha: 0.18)
             case .sand: NSColor(red: 0.80, green: 0.68, blue: 0.48, alpha: 0.18)
@@ -46,7 +48,7 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(sortAscending, forKey: "sortAscending") }
     }
 
-    var panelTint: PanelTint = .system {
+    var panelTint: PanelTint = .midnight {
         didSet { UserDefaults.standard.set(panelTint.rawValue, forKey: "panelTint") }
     }
 
@@ -130,7 +132,7 @@ final class AppSettings {
     }
 
     /// Appearance mode: system, light, or dark.
-    var appearanceMode: AppearanceMode = .system {
+    var appearanceMode: AppearanceMode = .dark {
         didSet {
             UserDefaults.standard.set(appearanceMode.rawValue, forKey: "appearanceMode")
             applyAppearance()
@@ -396,6 +398,7 @@ extension AppSettings.PanelTint {
     func displayName(_ l10n: L10n) -> String {
         switch self {
         case .system: l10n["settings.panelTint.system"]
+        case .midnight: l10n["settings.panelTint.midnight"]
         case .graphite: l10n["settings.panelTint.graphite"]
         case .slate: l10n["settings.panelTint.slate"]
         case .sand: l10n["settings.panelTint.sand"]

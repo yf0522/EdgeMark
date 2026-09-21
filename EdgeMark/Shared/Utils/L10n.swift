@@ -25,7 +25,7 @@ final class L10n: @unchecked Sendable {
     private var strings: [String: String] = [:]
 
     private init() {
-        locale = UserDefaults.standard.string(forKey: "app.locale") ?? "system"
+        locale = UserDefaults.standard.string(forKey: "app.locale") ?? "zh-Hans"
         loadStrings()
     }
 

@@ -1,3 +1,5 @@
+import ApplicationServices
+import Carbon
 import Cocoa
 import OSLog
 import SwiftUI
@@ -18,11 +20,13 @@ class KeyableWindow: NSWindow {
 // MARK: - SidePanelController
 
 final class SidePanelController: NSWindowController {
-    private let cornerRadius: CGFloat = 10
+    private static let cornerRadius: CGFloat = 16
+    private static let edgeInset: CGFloat = 14
     private(set) var isShown = false
     private var isAnimating = false
     private var animationGeneration = 0
     private var hideTimer: Timer?
+    private var mousePresenceTimer: Timer?
     private var dummyWindow: NSWindow?
     private var trackingArea: NSTrackingArea?
     private var previousApp: NSRunningApplication?
@@ -40,6 +44,8 @@ final class SidePanelController: NSWindowController {
     init() {
         let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let panelWidth = PanelSettings.shared.panelWidth
+        let panelHeight = Self.resolvedPanelHeight(for: visibleFrame)
+        let panelY = visibleFrame.midY - panelHeight / 2
         let side = PanelSettings.shared.edgeSide
 
         // Park the window far off-screen so it can't overlap any monitor.
@@ -49,9 +55,9 @@ final class SidePanelController: NSWindowController {
         let window = KeyableWindow(
             contentRect: NSRect(
                 x: startX,
-                y: visibleFrame.minY,
+                y: panelY,
                 width: panelWidth,
-                height: visibleFrame.height,
+                height: panelHeight,
             ),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
@@ -67,7 +73,7 @@ final class SidePanelController: NSWindowController {
 
         // Container view — sits between the window and the SwiftUI hosting view so we can
         // layer the resize handle on top without interfering with SwiftUI layout.
-        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: visibleFrame.height))
+        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight))
 
         // Host SwiftUI content — fills the container
         let hostingView = NSHostingView(
@@ -80,7 +86,7 @@ final class SidePanelController: NSWindowController {
         hostingView.frame = containerView.bounds
         hostingView.autoresizingMask = [.width, .height]
         hostingView.wantsLayer = true
-        hostingView.layer?.cornerRadius = 10
+        hostingView.layer?.cornerRadius = Self.cornerRadius
         hostingView.layer?.maskedCorners = Self.maskedCorners(for: side)
         hostingView.layer?.masksToBounds = true
         containerView.addSubview(hostingView)
@@ -88,7 +94,7 @@ final class SidePanelController: NSWindowController {
         // Resize handle — thin strip on the inner edge
         let handle = ResizeHandleView()
         handle.side = side
-        handle.frame = Self.resizeHandleFrame(for: side, containerWidth: panelWidth, height: visibleFrame.height)
+        handle.frame = Self.resizeHandleFrame(for: side, containerWidth: panelWidth, height: panelHeight)
         handle.autoresizingMask = Self.resizeHandleAutoresizing(for: side)
         containerView.addSubview(handle)
 
@@ -172,12 +178,35 @@ final class SidePanelController: NSWindowController {
             return event
         }
 
+        // Fast section switching: ⌘1 = memo, ⌘2 = clipboard.
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, isShown else { return event }
+            let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+            guard modifiers == .command else { return event }
+
+            switch event.keyCode {
+            case 18: // 1
+                AppNavigation.shared.showMemo()
+                return nil
+            case 19: // 2
+                AppNavigation.shared.showClipboard()
+                peekCoordinator.dismissNow()
+                noteStore.clearSelection()
+                return nil
+            default:
+                return event
+            }
+        }
+
         // List keyboard navigation: ↑ / ↓ / ⇧↑ / ⇧↓ / Return.
         // Runs before any SwiftUI .onKeyPress so it wins over default focus traversal.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, isShown else { return event }
             // Skip while editing text or browsing the editor / trash.
             if let fr = window.firstResponder as? NSTextView, fr.isFieldEditor {
+                return event
+            }
+            if AppNavigation.shared.section == .clipboard {
                 return event
             }
             if noteStore.selectedNote != nil || noteStore.showTrash {
@@ -206,6 +235,15 @@ final class SidePanelController: NSWindowController {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, isShown else { return event }
             let s = ShortcutSettings.shared
+
+            if AppNavigation.shared.section == .clipboard {
+                if s.pinShortcut?.matches(event) == true {
+                    PanelSettings.shared.isPanelPinned.toggle()
+                    return nil
+                }
+                return event
+            }
+
             if s.searchShortcut?.matches(event) == true {
                 // Trash overlay: pass through (navigateToHome while Trash is active leaves
                 // pendingSearchOnHome stuck).
@@ -374,7 +412,6 @@ final class SidePanelController: NSWindowController {
     // MARK: - App Activation
 
     @objc private func handleAppActivation(_ notification: Notification) {
-        guard isShown else { return }
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
             as? NSRunningApplication
         else { return }
@@ -382,7 +419,7 @@ final class SidePanelController: NSWindowController {
 
         let name = app.localizedName ?? "unknown"
         Log.window.debug(
-            "[SidePanelController] app activated while panel shown — updating previousApp to \(name, privacy: .public)",
+            "[SidePanelController] external app activated — remembering target: \(name, privacy: .public)",
         )
         previousApp = app
     }
@@ -516,6 +553,8 @@ final class SidePanelController: NSWindowController {
             // Activate after animation is submitted to Core Animation
             NSApp.activate(ignoringOtherApps: true)
         }
+
+        startMousePresenceMonitoring()
     }
 
     func hidePanel(restoreFocus: Bool = true) {
@@ -527,6 +566,7 @@ final class SidePanelController: NSWindowController {
         let gen = animationGeneration &+ 1
         animationGeneration = gen
         cancelHideTimer()
+        stopMousePresenceMonitoring()
         edgeDetector.pauseDetection()
 
         let panelWidth = window.frame.width
@@ -595,6 +635,97 @@ final class SidePanelController: NSWindowController {
         }
     }
 
+    func captureScreenshot() {
+        if isShown {
+            hidePanel(restoreFocus: false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                ShortcutManager.shared.captureScreenshot()
+            }
+        } else {
+            ShortcutManager.shared.captureScreenshot()
+        }
+    }
+
+    @discardableResult
+    func pasteClipboardItem(_ item: ClipboardHistoryItem) -> Bool {
+        ClipboardStore.shared.copy(item)
+
+        guard ensureAccessibilityPermission() else {
+            showAccessibilityPermissionAlert()
+            return false
+        }
+
+        guard let targetApp = previousApp else {
+            showPasteTargetUnavailableAlert()
+            return false
+        }
+
+        hidePanel(restoreFocus: false)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
+            targetApp.activate(options: [.activateIgnoringOtherApps])
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                Self.postPasteShortcut()
+            }
+        }
+        return true
+    }
+
+    private func ensureAccessibilityPermission() -> Bool {
+        if AXIsProcessTrusted() {
+            return true
+        }
+
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        let options = [promptKey: true] as CFDictionary
+        return AXIsProcessTrustedWithOptions(options)
+    }
+
+    private func showPasteTargetUnavailableAlert() {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "内容已复制"
+        alert.informativeText = "没有找到刚才使用的应用，因此没有自动粘贴。请回到目标应用后按 ⌘V。"
+        alert.addButton(withTitle: "好")
+        alert.runModal()
+    }
+
+    private func showAccessibilityPermissionAlert() {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "需要“辅助功能”权限"
+        alert.informativeText = "内容已经复制到系统剪贴板。开启辅助功能权限后，双击剪贴板记录或按 Enter 即可自动粘贴到刚才使用的应用。"
+        alert.addButton(withTitle: "打开系统设置")
+        alert.addButton(withTitle: "稍后")
+
+        if alert.runModal() == .alertFirstButtonReturn,
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private static func postPasteShortcut() {
+        guard let source = CGEventSource(stateID: .combinedSessionState),
+              let keyDown = CGEvent(
+                  keyboardEventSource: source,
+                  virtualKey: CGKeyCode(kVK_ANSI_V),
+                  keyDown: true,
+              ),
+              let keyUp = CGEvent(
+                  keyboardEventSource: source,
+                  virtualKey: CGKeyCode(kVK_ANSI_V),
+                  keyDown: false,
+              )
+        else { return }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+    }
+
     // MARK: - Resize
 
     private func panelDidResize(to newWidth: CGFloat) {
@@ -627,36 +758,60 @@ final class SidePanelController: NSWindowController {
         NSRect(x: -panelWidth - 1000, y: -10000, width: panelWidth, height: 100)
     }
 
-    /// Returns (shown, hidden) frames for the given edge side using the persisted panel width.
+    /// Returns compact, vertically-centered floating frames for the configured edge.
     private func panelFrames(visibleFrame: NSRect, side: EdgeSide) -> (shown: NSRect, hidden: NSRect) {
         let width = PanelSettings.shared.panelWidth
+        let height = Self.resolvedPanelHeight(for: visibleFrame)
+        let y = visibleFrame.midY - height / 2
         let shown: NSRect
         let hidden: NSRect
+
         switch side {
         case .right:
-            shown = NSRect(x: visibleFrame.maxX - width, y: visibleFrame.minY,
-                           width: width, height: visibleFrame.height)
-            hidden = NSRect(x: visibleFrame.maxX, y: visibleFrame.minY,
-                            width: width, height: visibleFrame.height)
+            shown = NSRect(
+                x: visibleFrame.maxX - width - Self.edgeInset,
+                y: y,
+                width: width,
+                height: height,
+            )
+            hidden = NSRect(
+                x: visibleFrame.maxX + Self.edgeInset,
+                y: y,
+                width: width,
+                height: height,
+            )
         case .left:
-            shown = NSRect(x: visibleFrame.minX, y: visibleFrame.minY,
-                           width: width, height: visibleFrame.height)
-            hidden = NSRect(x: visibleFrame.minX - width, y: visibleFrame.minY,
-                            width: width, height: visibleFrame.height)
+            shown = NSRect(
+                x: visibleFrame.minX + Self.edgeInset,
+                y: y,
+                width: width,
+                height: height,
+            )
+            hidden = NSRect(
+                x: visibleFrame.minX - width - Self.edgeInset,
+                y: y,
+                width: width,
+                height: height,
+            )
         }
+
         return (shown, hidden)
     }
 
-    /// Corner mask for the given edge side.
-    private static func maskedCorners(for side: EdgeSide) -> CACornerMask {
-        switch side {
-        case .right:
-            // Right edge → round left corners
-            [.layerMinXMinYCorner, .layerMinXMaxYCorner]
-        case .left:
-            // Left edge → round right corners
-            [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
-        }
+    private static func resolvedPanelHeight(for visibleFrame: NSRect) -> CGFloat {
+        let preferred = PanelSettings.shared.panelHeight
+        let eightyPercent = visibleFrame.height * 0.80
+        let available = max(480, visibleFrame.height - 24)
+        return min(max(min(preferred, eightyPercent), 480), available)
+    }
+
+    private static func maskedCorners(for _: EdgeSide) -> CACornerMask {
+        [
+            .layerMinXMinYCorner,
+            .layerMaxXMinYCorner,
+            .layerMinXMaxYCorner,
+            .layerMaxXMaxYCorner,
+        ]
     }
 
     /// Frame of the resize handle within the container view.
@@ -729,10 +884,60 @@ final class SidePanelController: NSWindowController {
         return false
     }
 
+    private func startMousePresenceMonitoring() {
+        stopMousePresenceMonitoring()
+
+        mousePresenceTimer = Timer.scheduledTimer(
+            withTimeInterval: 0.12,
+            repeats: true,
+        ) { [weak self] _ in
+            self?.updateAutoHideForMousePosition()
+        }
+
+        if let mousePresenceTimer {
+            RunLoop.main.add(mousePresenceTimer, forMode: .common)
+        }
+    }
+
+    private func stopMousePresenceMonitoring() {
+        mousePresenceTimer?.invalidate()
+        mousePresenceTimer = nil
+    }
+
+    private func updateAutoHideForMousePosition() {
+        guard isShown,
+              !isAnimating,
+              !isEditorFocused,
+              PanelSettings.shared.autoHideOnMouseExit,
+              PanelSettings.shared.dismissalMode == .auto,
+              !PanelSettings.shared.isPanelPinned
+        else {
+            cancelHideTimer()
+            return
+        }
+
+        if isMouseInPanel() {
+            cancelHideTimer()
+            return
+        }
+
+        guard hideTimer == nil else { return }
+
+        let delay = PanelSettings.shared.hideDelay
+        if delay <= 0 {
+            hidePanel()
+        } else {
+            Log.window.debug("[SidePanelController] mouse outside — hide timer (\(delay)s)")
+            startHideTimer(delay: delay)
+        }
+    }
+
     private func startHideTimer(delay: Double) {
         cancelHideTimer()
         hideTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            guard let self, isShown, !isMouseInPanel() else { return }
+            guard let self else { return }
+            hideTimer = nil
+            guard isShown, !isMouseInPanel() else { return }
             hidePanel()
         }
     }

@@ -3,21 +3,28 @@ import SwiftUI
 struct ContentView: View {
     @Environment(NoteStore.self) var noteStore
     @Environment(PeekCoordinator.self) var peekCoordinator
+    @State private var navigation = AppNavigation.shared
 
     private var showHome: Bool {
-        !noteStore.showTrash && noteStore.selectedFolder == nil && noteStore.selectedNote == nil
+        navigation.section == .memo
+            && !noteStore.showTrash
+            && noteStore.selectedFolder == nil
+            && noteStore.selectedNote == nil
     }
 
     private var showNoteList: Bool {
-        !noteStore.showTrash && noteStore.selectedFolder != nil && noteStore.selectedNote == nil
+        navigation.section == .memo
+            && !noteStore.showTrash
+            && noteStore.selectedFolder != nil
+            && noteStore.selectedNote == nil
     }
 
     private var showEditor: Bool {
-        !noteStore.showTrash && noteStore.selectedNote != nil
+        navigation.section == .memo
+            && !noteStore.showTrash
+            && noteStore.selectedNote != nil
     }
 
-    /// Horizontal page transition based on navigation direction.
-    /// Falls back to opacity when the user has chosen Fade animation style.
     private var pageTransition: AnyTransition {
         guard PanelSettings.shared.animationStyle == .slide else { return .opacity }
         switch noteStore.navigationDirection {
@@ -36,7 +43,6 @@ struct ContentView: View {
         }
     }
 
-    /// Trash uses vertical slide (from bottom), or opacity in Fade mode.
     private var trashTransition: AnyTransition {
         guard PanelSettings.shared.animationStyle == .slide else { return .opacity }
         return .asymmetric(
@@ -48,46 +54,65 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .top) {
             ZStack {
-                // HomeFolderView hosts the storage-root picker as an in-card mode
-                // (header + content swap), so when awaitingRootChoice it shows the
-                // picker rows; picking crossfades to the folder list within the same
-                // stable card. No separate picker view / card-over-card layer.
-                if showHome {
-                    HomeFolderView()
-                        .transition(pageTransition)
-                }
+                if navigation.section == .clipboard {
+                    ClipboardHistoryView()
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                } else {
+                    if showHome {
+                        HomeFolderView()
+                            .transition(pageTransition)
+                    }
 
-                if showNoteList {
-                    NoteListView()
-                        .id(noteStore.selectedFolder?.name)
-                        .transition(pageTransition)
-                }
+                    if showNoteList {
+                        NoteListView()
+                            .id(noteStore.selectedFolder?.name)
+                            .transition(pageTransition)
+                    }
 
-                if showEditor {
-                    EditorScreen()
-                        .id(noteStore.selectedNote?.id)
-                        .transition(pageTransition)
-                }
+                    if showEditor {
+                        EditorScreen()
+                            .id(noteStore.selectedNote?.id)
+                            .transition(pageTransition)
+                    }
 
-                if noteStore.showTrash {
-                    TrashView()
-                        .transition(trashTransition)
+                    if noteStore.showTrash {
+                        TrashView()
+                            .transition(trashTransition)
+                    }
                 }
             }
 
-            if let count = noteStore.copiedPathsCount {
+            if let count = noteStore.copiedPathsCount, navigation.section == .memo {
                 ClipboardFeedbackView(count: count)
                     .padding(.top, 12)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(1)
             }
         }
+        .background {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.055, green: 0.065, blue: 0.09),
+                    Color(red: 0.09, green: 0.11, blue: 0.16),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing,
+            )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(.white.opacity(0.06), lineWidth: 1)
+        }
         .clipped()
         .animation(.easeInOut(duration: 0.2), value: noteStore.copiedPathsCount)
-        // Dismiss any open hover/Quick-Look preview when the user navigates
-        // deeper (open note, enter folder, open trash). The preview is anchored
-        // to a row in the list view we're leaving, so it would otherwise float
-        // detached after the transition.
+        .animation(.easeInOut(duration: 0.2), value: navigation.section)
+        .onChange(of: navigation.section) { _, section in
+            if section == .clipboard {
+                peekCoordinator.dismissNow()
+                noteStore.clearSelection()
+            }
+        }
         .onChange(of: noteStore.selectedNote?.id) { _, newID in
             if newID != nil {
                 peekCoordinator.dismissNow()
@@ -112,5 +137,5 @@ struct ContentView: View {
         .environment(AppSettings.shared)
         .environment(L10n.shared)
         .environment(PeekCoordinator())
-        .frame(width: 400, height: 600)
+        .frame(width: 440, height: 720)
 }

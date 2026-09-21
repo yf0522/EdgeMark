@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         Log.app.info("[AppDelegate] launched v\(version, privacy: .public) (build \(build, privacy: .public))")
         AppSettings.shared.applyAppearance()
+        _ = ClipboardStore.shared
         setupMenuBar()
         panelController = SidePanelController()
         SidecarMigration.runIfNeeded()
@@ -93,6 +94,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "",
         ))
 
+        let clipboardItem = NSMenuItem(
+            title: l10n["menu.clipboard"],
+            action: #selector(openClipboard),
+            keyEquivalent: "",
+        )
+        clipboardItem.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: nil)
+        menu.addItem(clipboardItem)
+
+        let screenshotItem = NSMenuItem(
+            title: l10n["menu.screenshot"],
+            action: #selector(captureScreenshot),
+            keyEquivalent: "",
+        )
+        screenshotItem.image = NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: nil)
+        menu.addItem(screenshotItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let settingsItem = NSMenuItem(
@@ -137,6 +154,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func togglePanel() {
         panelController?.togglePanel()
+    }
+
+    @objc private func openClipboard() {
+        AppNavigation.shared.showClipboard()
+        panelController?.showPanel()
+    }
+
+    @objc private func captureScreenshot() {
+        panelController?.captureScreenshot()
     }
 
     /// Rebuild the Storage Location submenu's items from the current roots. Called at

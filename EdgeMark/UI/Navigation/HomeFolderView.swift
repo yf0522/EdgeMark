@@ -242,6 +242,13 @@ struct HomeFolderView: View {
                 PinButton()
 
                 HeaderIconButton(
+                    systemName: "doc.on.clipboard",
+                    help: "从剪贴板创建备忘录",
+                ) {
+                    createFromClipboard()
+                }
+
+                HeaderIconButton(
                     systemName: "magnifyingglass",
                     help: l10n["common.search"],
                 ) {
@@ -820,6 +827,11 @@ struct HomeFolderView: View {
         let note = noteStore.createNote(in: "")
         noteRename.beginCreate(note: note)
         DispatchQueue.main.async { isNoteRenameFocused = true }
+    }
+
+    private func createFromClipboard() {
+        guard let item = ClipboardStore.shared.latestItem else { return }
+        ClipboardMemoCreator.createMemo(from: item, in: noteStore)
     }
 
     private func startCreatingFolder(initialName: String? = nil) {

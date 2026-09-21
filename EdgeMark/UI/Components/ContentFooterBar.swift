@@ -1,8 +1,7 @@
 import Cocoa
 import SwiftUI
 
-/// Shared footer bar with sort (left) and settings (right) menus.
-/// Pinned at the bottom of the content card on home and folder list screens.
+/// Shared footer bar with sort (left), clipboard (center) and settings (right).
 struct ContentFooterBar: View {
     @Environment(AppSettings.self) var settings
     @Environment(NoteStore.self) var noteStore
@@ -14,7 +13,15 @@ struct ContentFooterBar: View {
             HeaderIconButton(systemName: "arrow.up.arrow.down", help: l10n["sort.help"]) {
                 showSortMenu()
             }
+
             Spacer()
+
+            HeaderIconButton(systemName: "doc.on.clipboard", help: "剪贴板") {
+                AppNavigation.shared.showClipboard()
+            }
+
+            Spacer()
+
             HeaderIconButton(systemName: "gearshape", help: l10n["menu.settings"]) {
                 showSettingsMenu()
             }
@@ -22,8 +29,6 @@ struct ContentFooterBar: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
     }
-
-    // MARK: - Sort Menu
 
     private func showSortMenu() {
         let l10n = L10n.shared
@@ -64,8 +69,6 @@ struct ContentFooterBar: View {
 
         popUpMenu(menu)
     }
-
-    // MARK: - Settings Menu
 
     private func showSettingsMenu() {
         let l10n = L10n.shared
@@ -110,9 +113,6 @@ struct ContentFooterBar: View {
         popUpMenu(menu)
     }
 
-    // MARK: - Helpers
-
-    /// Show an NSMenu at the current click location.
     private func popUpMenu(_ menu: NSMenu) {
         guard let event = NSApp.currentEvent,
               let view = event.window?.contentView

@@ -5,6 +5,8 @@ struct KeyboardSettingsTab: View {
 
     /// Global shortcut
     @State private var toggleShortcut: KeyboardShortcut?
+    @State private var openClipboardShortcut: KeyboardShortcut?
+    @State private var captureScreenshotShortcut: KeyboardShortcut?
 
     // Local configurable shortcuts
     @State private var newNoteShortcut: KeyboardShortcut?
@@ -18,6 +20,8 @@ struct KeyboardSettingsTab: View {
     init() {
         let s = ShortcutSettings.shared
         _toggleShortcut = State(initialValue: s.togglePanelShortcut)
+        _openClipboardShortcut = State(initialValue: s.openClipboardShortcut)
+        _captureScreenshotShortcut = State(initialValue: s.captureScreenshotShortcut)
         _newNoteShortcut = State(initialValue: s.newNoteShortcut)
         _newFolderShortcut = State(initialValue: s.newFolderShortcut)
         _searchShortcut = State(initialValue: s.searchShortcut)
@@ -41,6 +45,26 @@ struct KeyboardSettingsTab: View {
                 }
                 .onChange(of: toggleShortcut) { _, v in
                     ShortcutSettings.shared.togglePanelShortcut = v
+                }
+
+                HStack {
+                    Text(l10n["settings.keyboard.openClipboard"])
+                    Spacer()
+                    ShortcutRecorderView(shortcut: $openClipboardShortcut)
+                        .frame(width: 180, height: 32)
+                }
+                .onChange(of: openClipboardShortcut) { _, v in
+                    ShortcutSettings.shared.openClipboardShortcut = v
+                }
+
+                HStack {
+                    Text(l10n["settings.keyboard.captureScreenshot"])
+                    Spacer()
+                    ShortcutRecorderView(shortcut: $captureScreenshotShortcut)
+                        .frame(width: 180, height: 32)
+                }
+                .onChange(of: captureScreenshotShortcut) { _, v in
+                    ShortcutSettings.shared.captureScreenshotShortcut = v
                 }
             } header: {
                 Label(l10n["settings.keyboard.globalShortcuts"], systemImage: "globe")
@@ -76,6 +100,8 @@ struct KeyboardSettingsTab: View {
                     apply: { ShortcutSettings.shared.pinShortcut = $0 },
                 )
                 localShortcutRow("Escape", l10n["settings.keyboard.hidePanel"])
+                localShortcutRow("⌘1", l10n["settings.keyboard.memoSection"])
+                localShortcutRow("⌘2", l10n["settings.keyboard.clipboardSection"])
                 editableRow(
                     ownKey: "settings.keyboard.previousNote",
                     label: l10n["settings.keyboard.previousNote"],
