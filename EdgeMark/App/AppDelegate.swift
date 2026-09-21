@@ -162,7 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func captureScreenshot() {
-        ShortcutManager.shared.captureScreenshot()
+        panelController?.captureScreenshot()
     }
 
     /// Rebuild the Storage Location submenu's items from the current roots. Called at
