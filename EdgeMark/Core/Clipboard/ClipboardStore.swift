@@ -85,26 +85,20 @@ final class ClipboardStore: NSObject {
     private(set) var items: [ClipboardHistoryItem] = []
     private(set) var isMonitoring = true
 
-    var sensitiveFilteringEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(sensitiveFilteringEnabled, forKey: "clipboard.sensitiveFilteringEnabled")
-        }
-    }
-
-    private let maxItems = 300
+    private let settings = ClipboardSettings.shared
     private var lastChangeCount: Int
     private var timer: Timer?
 
-    private override init() {
-        lastChangeCount = NSPasteboard.general.changeCount
-        if UserDefaults.standard.object(forKey: "clipboard.sensitiveFilteringEnabled") == nil {
-            sensitiveFilteringEnabled = true
-        } else {
-            sensitiveFilteringEnabled = UserDefaults.standard.bool(forKey: "clipboard.sensitiveFilteringEnabled")
-        }
-        super.init()
-        load()
-        startTimer()
+    private let thumbnailCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 120
+        cache.totalCostLimit = 32 * 1024 * 1024
+        return cache
+    }()
+
+    var sensitiveFilteringEnabled: Bool {
+        get { settings.sensitiveFilteringEnabled }
+        set { settings.sensitiveFilteringEnabled = newValue }
     }
 
     var latestItem: ClipboardHistoryItem? {
@@ -121,6 +115,30 @@ final class ClipboardStore: NSObject {
             }
             return lhs.createdAt > rhs.createdAt
         }
+    }
+
+    var imageItemCount: Int {
+        items.count(where: { $0.kind == .image })
+    }
+
+    var imageStorageUsageBytes: Int64 {
+        directorySize(assetsDirectory) + directorySize(thumbnailsDirectory)
+    }
+
+    private override init() {
+        lastChangeCount = NSPasteboard.general.changeCount
+        super.init()
+        load()
+        applyRetentionPolicy()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleClipboardSettingsChanged),
+            name: .clipboardSettingsChanged,
+            object: nil
+        )
+
+        startTimer()
     }
 
     func toggleMonitoring() {
@@ -151,23 +169,27 @@ final class ClipboardStore: NSObject {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         items[index].isPinned.toggle()
         save()
+        applyRetentionPolicy()
     }
 
     func toggleFavorite(_ item: ClipboardHistoryItem) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         items[index].isFavorite.toggle()
         save()
+        applyRetentionPolicy()
     }
 
     func delete(_ item: ClipboardHistoryItem) {
-        removeAssetIfNeeded(for: item)
-        items.removeAll { $0.id == item.id }
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        removeItem(at: index)
         save()
     }
 
     func clearAll() {
         items.removeAll()
+        thumbnailCache.removeAllObjects()
         try? FileManager.default.removeItem(at: assetsDirectory)
+        try? FileManager.default.removeItem(at: thumbnailsDirectory)
         save()
     }
 
@@ -179,6 +201,41 @@ final class ClipboardStore: NSObject {
     func imageData(for item: ClipboardHistoryItem) -> Data? {
         guard let filename = item.assetFilename else { return nil }
         return try? Data(contentsOf: assetsDirectory.appendingPathComponent(filename))
+    }
+
+    func thumbnail(for item: ClipboardHistoryItem) -> NSImage? {
+        guard item.kind == .image,
+              let filename = item.assetFilename
+        else { return nil }
+
+        let key = filename as NSString
+        if let cached = thumbnailCache.object(forKey: key) {
+            return cached
+        }
+
+        let url = thumbnailURL(forAssetFilename: filename)
+        if let image = NSImage(contentsOf: url) {
+            cacheThumbnail(image, key: key)
+            return image
+        }
+
+        guard let fullImage = image(for: item) else { return nil }
+        let thumbnail = makeThumbnail(from: fullImage)
+        persistThumbnail(thumbnail, forAssetFilename: filename)
+        cacheThumbnail(thumbnail, key: key)
+        return thumbnail
+    }
+
+    func applyRetentionPolicy() {
+        guard settings.autoCleanupEnabled else {
+            save()
+            return
+        }
+
+        cleanupHistoryCount()
+        cleanupImageCount()
+        cleanupImageStorage()
+        save()
     }
 
     private func startTimer() {
@@ -199,23 +256,28 @@ final class ClipboardStore: NSObject {
         captureIfNeeded()
     }
 
+    @objc private func handleClipboardSettingsChanged() {
+        applyRetentionPolicy()
+    }
+
     private func captureIfNeeded() {
         let pasteboard = NSPasteboard.general
         guard pasteboard.changeCount != lastChangeCount else { return }
         lastChangeCount = pasteboard.changeCount
         guard isMonitoring else { return }
 
-        if captureFiles(from: pasteboard) {
+        if settings.recordFiles, captureFiles(from: pasteboard) {
             return
         }
-        if captureImage(from: pasteboard) {
+
+        if settings.recordImages, captureImage(from: pasteboard) {
             return
         }
 
         guard let rawText = pasteboard.string(forType: .string) else { return }
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        guard !sensitiveFilteringEnabled || !looksSensitive(text) else { return }
+        guard !settings.sensitiveFilteringEnabled || !looksSensitive(text) else { return }
 
         let kind = classify(text)
         if let index = items.firstIndex(where: { $0.kind == kind && $0.text == text }) {
@@ -224,8 +286,7 @@ final class ClipboardStore: NSObject {
             items.append(ClipboardHistoryItem(kind: kind, text: text))
         }
 
-        trimIfNeeded()
-        save()
+        applyRetentionPolicy()
     }
 
     private func captureFiles(from pasteboard: NSPasteboard) -> Bool {
@@ -252,8 +313,7 @@ final class ClipboardStore: NSObject {
             )
         }
 
-        trimIfNeeded()
-        save()
+        applyRetentionPolicy()
         return true
     }
 
@@ -270,12 +330,14 @@ final class ClipboardStore: NSObject {
 
         if let index = items.firstIndex(where: { $0.kind == .image && $0.assetFilename == filename }) {
             items[index].createdAt = Date()
+            if !FileManager.default.fileExists(atPath: thumbnailURL(forAssetFilename: filename).path) {
+                persistThumbnail(makeThumbnail(from: image), forAssetFilename: filename)
+            }
         } else {
-            try? FileManager.default.createDirectory(
-                at: assetsDirectory,
-                withIntermediateDirectories: true
-            )
+            try? FileManager.default.createDirectory(at: assetsDirectory, withIntermediateDirectories: true)
             try? pngData.write(to: assetsDirectory.appendingPathComponent(filename), options: .atomic)
+            persistThumbnail(makeThumbnail(from: image), forAssetFilename: filename)
+
             items.append(
                 ClipboardHistoryItem(
                     kind: .image,
@@ -285,8 +347,7 @@ final class ClipboardStore: NSObject {
             )
         }
 
-        trimIfNeeded()
-        save()
+        applyRetentionPolicy()
         return true
     }
 
@@ -323,6 +384,111 @@ final class ClipboardStore: NSObject {
         }
     }
 
+    private func cleanupHistoryCount() {
+        while items.count > settings.historyLimit {
+            guard let index = oldestRemovableIndex(in: items.indices) else { break }
+            removeItem(at: index)
+        }
+    }
+
+    private func cleanupImageCount() {
+        while imageItemCount > settings.imageLimit {
+            let imageIndices = items.indices.filter { items[$0].kind == .image }
+            guard let index = oldestRemovableIndex(in: imageIndices) else { break }
+            removeItem(at: index)
+        }
+    }
+
+    private func cleanupImageStorage() {
+        let limitBytes = Int64(settings.imageCacheLimitMB) * 1024 * 1024
+
+        while imageStorageUsageBytes > limitBytes {
+            let imageIndices = items.indices.filter { items[$0].kind == .image }
+            guard let index = oldestRemovableIndex(in: imageIndices) else { break }
+            removeItem(at: index)
+        }
+    }
+
+    private func oldestRemovableIndex<S: Sequence>(in indices: S) -> Int? where S.Element == Int {
+        indices
+            .filter { !items[$0].isPinned && !items[$0].isFavorite }
+            .min { items[$0].createdAt < items[$1].createdAt }
+    }
+
+    private func removeItem(at index: Int) {
+        guard items.indices.contains(index) else { return }
+        let item = items[index]
+
+        if item.kind == .image, let filename = item.assetFilename {
+            try? FileManager.default.removeItem(
+                at: assetsDirectory.appendingPathComponent(filename)
+            )
+            try? FileManager.default.removeItem(
+                at: thumbnailURL(forAssetFilename: filename)
+            )
+            thumbnailCache.removeObject(forKey: filename as NSString)
+        }
+
+        items.remove(at: index)
+    }
+
+    private func makeThumbnail(from image: NSImage) -> NSImage {
+        let maxDimension: CGFloat = 240
+        let sourceSize = image.size
+
+        guard sourceSize.width > 0, sourceSize.height > 0 else {
+            return image
+        }
+
+        let scale = min(
+            maxDimension / sourceSize.width,
+            maxDimension / sourceSize.height,
+            1
+        )
+        let targetSize = NSSize(
+            width: max(1, sourceSize.width * scale),
+            height: max(1, sourceSize.height * scale)
+        )
+
+        let thumbnail = NSImage(size: targetSize)
+        thumbnail.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(
+            in: NSRect(origin: .zero, size: targetSize),
+            from: NSRect(origin: .zero, size: sourceSize),
+            operation: .copy,
+            fraction: 1
+        )
+        thumbnail.unlockFocus()
+        return thumbnail
+    }
+
+    private func persistThumbnail(_ image: NSImage, forAssetFilename filename: String) {
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let data = bitmap.representation(using: .png, properties: [:])
+        else { return }
+
+        try? FileManager.default.createDirectory(
+            at: thumbnailsDirectory,
+            withIntermediateDirectories: true
+        )
+        try? data.write(
+            to: thumbnailURL(forAssetFilename: filename),
+            options: .atomic
+        )
+    }
+
+    private func cacheThumbnail(_ image: NSImage, key: NSString) {
+        let pixels = max(1, Int(image.size.width * image.size.height))
+        thumbnailCache.setObject(image, forKey: key, cost: pixels * 4)
+    }
+
+    private func thumbnailURL(forAssetFilename filename: String) -> URL {
+        let stem = (filename as NSString).deletingPathExtension
+        return thumbnailsDirectory.appendingPathComponent("\(stem)-thumb.png")
+    }
+
     private var applicationSupportDirectory: URL {
         let base = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -344,13 +510,35 @@ final class ClipboardStore: NSObject {
         return directory
     }
 
+    private var thumbnailsDirectory: URL {
+        let directory = applicationSupportDirectory
+            .appendingPathComponent("ClipboardThumbnails", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private func directorySize(_ directory: URL) -> Int64 {
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                total += Int64(size)
+            }
+        }
+        return total
+    }
+
     private func load() {
         guard let data = try? Data(contentsOf: storageURL),
               let decoded = try? JSONDecoder().decode([ClipboardHistoryItem].self, from: data)
         else { return }
 
         items = decoded
-        trimIfNeeded()
     }
 
     private func save() {
@@ -358,34 +546,7 @@ final class ClipboardStore: NSObject {
         try? data.write(to: storageURL, options: .atomic)
     }
 
-    private func trimIfNeeded() {
-        while items.count > maxItems {
-            guard let oldestIndex = items
-                .enumerated()
-                .filter({ !$0.element.isPinned && !$0.element.isFavorite })
-                .min(by: { $0.element.createdAt < $1.element.createdAt })?
-                .offset
-            else {
-                break
-            }
-            let removed = items[oldestIndex]
-            removeAssetIfNeeded(for: removed)
-            items.remove(at: oldestIndex)
-        }
-    }
-
-    private func removeAssetIfNeeded(for item: ClipboardHistoryItem) {
-        guard item.kind == .image,
-              let filename = item.assetFilename
-        else { return }
-
-        let stillReferenced = items.contains {
-            $0.id != item.id && $0.assetFilename == filename
-        }
-        if !stillReferenced {
-            try? FileManager.default.removeItem(
-                at: assetsDirectory.appendingPathComponent(filename)
-            )
-        }
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 }
