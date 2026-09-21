@@ -146,14 +146,14 @@ final class ShortcutManager {
             return noErr
         case 3:
             Log.shortcuts.debug("[ShortcutManager] screenshot hotkey pressed")
-            captureInteractiveScreenshot()
+            captureScreenshot()
             return noErr
         default:
             return OSStatus(eventNotHandledErr)
         }
     }
 
-    private func captureInteractiveScreenshot() {
+    func captureScreenshot() {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
         process.arguments = ["-i", "-c"]
