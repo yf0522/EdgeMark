@@ -6,7 +6,7 @@ enum ClipboardMemoCreator {
     static func createMemo(
         from item: ClipboardHistoryItem,
         in noteStore: NoteStore,
-        folder: String = ""
+        folder: String = "",
     ) -> Note? {
         var note = noteStore.createNote(in: folder)
         let title = uniqueTitle(for: item, noteStore: noteStore, folder: folder, excluding: note.id)
@@ -51,7 +51,7 @@ enum ClipboardMemoCreator {
         for item: ClipboardHistoryItem,
         noteStore: NoteStore,
         folder: String,
-        excluding noteID: UUID
+        excluding noteID: UUID,
     ) -> String {
         let base = baseTitle(for: item)
         var candidate = base
