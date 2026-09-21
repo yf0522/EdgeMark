@@ -435,7 +435,7 @@ struct NoteListView: View {
         ClipboardMemoCreator.createMemo(
             from: item,
             in: noteStore,
-            folder: noteStore.selectedFolder?.name ?? ""
+            folder: noteStore.selectedFolder?.name ?? "",
         )
     }
 
