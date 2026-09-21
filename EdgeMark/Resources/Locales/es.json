@@ -287,5 +287,6 @@
   "settings.clipboard.historyUsage": "Elementos del historial",
   "settings.clipboard.imageUsage": "Caché de imágenes",
   "settings.clipboard.imageUsageValue": "{0} imágenes · {1}",
-  "settings.clipboard.cleanupNow": "Limpiar ahora"
+  "settings.clipboard.cleanupNow": "Limpiar ahora",
+  "settings.panelTint.midnight": "Medianoche"
 }
