@@ -82,7 +82,7 @@ struct ClipboardHistoryView: View {
                             ForEach(filteredItems) { item in
                                 ClipboardHistoryRow(
                                     item: item,
-                                    image: item.kind == .image ? store.image(for: item) : nil,
+                                    image: item.kind == .image ? store.thumbnail(for: item) : nil,
                                     copied: copiedItemID == item.id,
                                     memoCreated: memoCreatedItemID == item.id,
                                     onCopy: { copy(item) },
