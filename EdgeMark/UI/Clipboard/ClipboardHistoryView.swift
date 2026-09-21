@@ -1,16 +1,65 @@
+import AppKit
 import SwiftUI
 
 struct ClipboardHistoryView: View {
+    @Environment(NoteStore.self) private var noteStore
+
     @State private var store = ClipboardStore.shared
     @State private var query = ""
+    @State private var selectedFilter: ClipboardFilter = .all
     @State private var showClearConfirmation = false
     @State private var copiedItemID: UUID?
+    @State private var memoCreatedItemID: UUID?
+
+    private enum ClipboardFilter: String, CaseIterable, Identifiable {
+        case all = "全部"
+        case favorite = "收藏"
+        case text = "文本"
+        case url = "链接"
+        case code = "代码"
+        case image = "图片"
+        case files = "文件"
+
+        var id: String { rawValue }
+
+        var icon: String {
+            switch self {
+            case .all: "square.grid.2x2"
+            case .favorite: "star.fill"
+            case .text: "text.alignleft"
+            case .url: "link"
+            case .code: "chevron.left.forwardslash.chevron.right"
+            case .image: "photo"
+            case .files: "doc.on.doc"
+            }
+        }
+
+        func includes(_ item: ClipboardHistoryItem) -> Bool {
+            switch self {
+            case .all: true
+            case .favorite: item.isFavorite
+            case .text: item.kind == .text
+            case .url: item.kind == .url
+            case .code: item.kind == .code
+            case .image: item.kind == .image
+            case .files: item.kind == .files
+            }
+        }
+    }
 
     private var filteredItems: [ClipboardHistoryItem] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return store.orderedItems }
-        return store.orderedItems.filter {
-            $0.text.localizedCaseInsensitiveContains(trimmed)
+
+        return store.orderedItems.filter { item in
+            guard selectedFilter.includes(item) else { return false }
+            guard !trimmed.isEmpty else { return true }
+
+            if item.text.localizedCaseInsensitiveContains(trimmed) {
+                return true
+            }
+            return item.filePaths.contains {
+                $0.localizedCaseInsensitiveContains(trimmed)
+            }
         }
     }
 
@@ -20,6 +69,7 @@ struct ClipboardHistoryView: View {
         } content: {
             VStack(spacing: 0) {
                 searchBar
+                filterBar
 
                 Divider()
                     .padding(.horizontal, 12)
@@ -32,10 +82,14 @@ struct ClipboardHistoryView: View {
                             ForEach(filteredItems) { item in
                                 ClipboardHistoryRow(
                                     item: item,
+                                    image: item.kind == .image ? store.image(for: item) : nil,
                                     copied: copiedItemID == item.id,
+                                    memoCreated: memoCreatedItemID == item.id,
                                     onCopy: { copy(item) },
+                                    onCreateMemo: { createMemo(from: item) },
                                     onTogglePin: { store.togglePin(item) },
-                                    onDelete: { store.delete(item) },
+                                    onToggleFavorite: { store.toggleFavorite(item) },
+                                    onDelete: { store.delete(item) }
                                 )
 
                                 if item.id != filteredItems.last?.id {
@@ -60,7 +114,7 @@ struct ClipboardHistoryView: View {
                 store.clearAll()
             }
         } message: {
-            Text("所有已保存的剪贴板文本都会被删除，此操作无法撤销。")
+            Text("所有已保存的剪贴板记录和本地图片缓存都会被删除，此操作无法撤销。")
         }
     }
 
@@ -78,8 +132,15 @@ struct ClipboardHistoryView: View {
             Spacer()
 
             HeaderIconButton(
+                systemName: store.sensitiveFilteringEnabled ? "shield.lefthalf.filled" : "shield.slash",
+                help: store.sensitiveFilteringEnabled ? "敏感内容过滤已开启" : "敏感内容过滤已关闭"
+            ) {
+                store.sensitiveFilteringEnabled.toggle()
+            }
+
+            HeaderIconButton(
                 systemName: store.isMonitoring ? "pause.circle" : "play.circle",
-                help: store.isMonitoring ? "暂停自动记录" : "继续自动记录",
+                help: store.isMonitoring ? "暂停自动记录" : "继续自动记录"
             ) {
                 store.toggleMonitoring()
             }
@@ -106,7 +167,36 @@ struct ClipboardHistoryView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 7)
+    }
+
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(ClipboardFilter.allCases) { filter in
+                    Button {
+                        selectedFilter = filter
+                    } label: {
+                        Label(filter.rawValue, systemImage: filter.icon)
+                            .font(.caption)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background {
+                                Capsule()
+                                    .fill(
+                                        selectedFilter == filter
+                                            ? Color.primary.opacity(0.12)
+                                            : Color.primary.opacity(0.04)
+                                    )
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 9)
+        }
     }
 
     private var emptyState: some View {
@@ -120,7 +210,7 @@ struct ClipboardHistoryView: View {
             Text(query.isEmpty ? "暂无剪贴板记录" : "没有匹配的内容")
                 .font(.headline)
 
-            Text(query.isEmpty ? "复制文本后会自动出现在这里" : "换个关键词试试")
+            Text(query.isEmpty ? "复制文字、图片或文件后会自动出现在这里" : "换个关键词或分组试试")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -130,13 +220,19 @@ struct ClipboardHistoryView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: store.isMonitoring ? "record.circle.fill" : "pause.circle")
                 .foregroundStyle(store.isMonitoring ? .secondary : .tertiary)
 
-            Text(store.isMonitoring ? "自动记录已开启" : "自动记录已暂停")
+            Text(store.isMonitoring ? "自动记录" : "已暂停")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            if store.sensitiveFilteringEnabled {
+                Label("隐私过滤", systemImage: "shield")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
 
             Spacer()
 
@@ -165,29 +261,44 @@ struct ClipboardHistoryView: View {
             }
         }
     }
+
+    private func createMemo(from item: ClipboardHistoryItem) {
+        let folder = noteStore.selectedFolder?.name ?? ""
+        guard ClipboardMemoCreator.createMemo(from: item, in: noteStore, folder: folder) != nil else {
+            return
+        }
+
+        memoCreatedItemID = item.id
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.2))
+            memoCreatedItemID = nil
+        }
+    }
 }
 
 private struct ClipboardHistoryRow: View {
     let item: ClipboardHistoryItem
+    let image: NSImage?
     let copied: Bool
+    let memoCreated: Bool
     let onCopy: () -> Void
+    let onCreateMemo: () -> Void
     let onTogglePin: () -> Void
+    let onToggleFavorite: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: item.isPinned ? "pin.fill" : "doc.text")
-                .frame(width: 20)
-                .foregroundStyle(item.isPinned ? .primary : .secondary)
-                .padding(.top, 2)
+            leadingPreview
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(item.text)
-                    .font(.system(size: 13))
-                    .lineLimit(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                contentPreview
 
                 HStack(spacing: 8) {
+                    Label(item.kind.displayName, systemImage: item.kind.systemImage)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+
                     Text(relativeTime)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -197,15 +308,30 @@ private struct ClipboardHistoryRow: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
+
+                    if memoCreated {
+                        Label("已转备忘录", systemImage: "note.text")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
-            Button(action: onTogglePin) {
-                Image(systemName: item.isPinned ? "pin.slash" : "pin")
-                    .foregroundStyle(.secondary)
+            VStack(spacing: 8) {
+                Button(action: onToggleFavorite) {
+                    Image(systemName: item.isFavorite ? "star.fill" : "star")
+                        .foregroundStyle(item.isFavorite ? .primary : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help(item.isFavorite ? "取消收藏" : "收藏")
+
+                Button(action: onTogglePin) {
+                    Image(systemName: item.isPinned ? "pin.fill" : "pin")
+                        .foregroundStyle(item.isPinned ? .primary : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help(item.isPinned ? "取消置顶" : "置顶")
             }
-            .buttonStyle(.plain)
-            .help(item.isPinned ? "取消置顶" : "置顶")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -213,11 +339,89 @@ private struct ClipboardHistoryRow: View {
         .onTapGesture(perform: onCopy)
         .contextMenu {
             Button("复制", systemImage: "doc.on.doc", action: onCopy)
-            Button(item.isPinned ? "取消置顶" : "置顶", systemImage: item.isPinned ? "pin.slash" : "pin", action: onTogglePin)
+            Button("转为备忘录", systemImage: "note.text.badge.plus", action: onCreateMemo)
+
+            if item.kind == .url, let url = URL(string: item.text) {
+                Button("在浏览器中打开", systemImage: "safari") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+
             Divider()
+
+            Button(
+                item.isFavorite ? "取消收藏" : "收藏",
+                systemImage: item.isFavorite ? "star.slash" : "star",
+                action: onToggleFavorite
+            )
+            Button(
+                item.isPinned ? "取消置顶" : "置顶",
+                systemImage: item.isPinned ? "pin.slash" : "pin",
+                action: onTogglePin
+            )
+
+            Divider()
+
             Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
         }
-        .help("点击复制")
+        .help("点击复制，右键可转为备忘录")
+    }
+
+    @ViewBuilder
+    private var leadingPreview: some View {
+        if let image {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+        } else {
+            Image(systemName: item.isPinned ? "pin.fill" : item.kind.systemImage)
+                .frame(width: 24)
+                .foregroundStyle(item.isPinned ? .primary : .secondary)
+                .padding(.top, 2)
+        }
+    }
+
+    @ViewBuilder
+    private var contentPreview: some View {
+        switch item.kind {
+        case .image:
+            Text("剪贴板图片")
+                .font(.system(size: 13, weight: .medium))
+        case .files:
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(item.filePaths.prefix(4)), id: \.self) { path in
+                    Label(
+                        URL(fileURLWithPath: path).lastPathComponent,
+                        systemImage: "doc"
+                    )
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+                }
+                if item.filePaths.count > 4 {
+                    Text("还有 \(item.filePaths.count - 4) 个文件")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        case .code:
+            Text(item.text)
+                .font(.system(size: 12, design: .monospaced))
+                .lineLimit(5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .url:
+            Text(item.text)
+                .font(.system(size: 13))
+                .foregroundStyle(.primary)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .text:
+            Text(item.text)
+                .font(.system(size: 13))
+                .lineLimit(5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var relativeTime: String {
