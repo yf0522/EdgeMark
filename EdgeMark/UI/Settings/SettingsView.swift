@@ -15,6 +15,11 @@ struct SettingsView: View {
                     Label(l10n["settings.tab.behavior"], systemImage: "macwindow.on.rectangle")
                 }
 
+            ClipboardSettingsTab()
+                .tabItem {
+                    Label(l10n["settings.tab.clipboard"], systemImage: "doc.on.clipboard")
+                }
+
             TagsSettingsTab()
                 .tabItem {
                     Label(l10n["settings.tab.tags"], systemImage: "tag")
