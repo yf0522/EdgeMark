@@ -412,7 +412,6 @@ final class SidePanelController: NSWindowController {
     // MARK: - App Activation
 
     @objc private func handleAppActivation(_ notification: Notification) {
-        guard isShown else { return }
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
             as? NSRunningApplication
         else { return }
@@ -420,7 +419,7 @@ final class SidePanelController: NSWindowController {
 
         let name = app.localizedName ?? "unknown"
         Log.window.debug(
-            "[SidePanelController] app activated while panel shown — updating previousApp to \(name, privacy: .public)",
+            "[SidePanelController] external app activated — remembering target: \(name, privacy: .public)",
         )
         previousApp = app
     }
@@ -656,9 +655,19 @@ final class SidePanelController: NSWindowController {
             return false
         }
 
-        hidePanel()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
-            Self.postPasteShortcut()
+        guard let targetApp = previousApp else {
+            showPasteTargetUnavailableAlert()
+            return false
+        }
+
+        hidePanel(restoreFocus: false)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
+            targetApp.activate(options: [.activateIgnoringOtherApps])
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                Self.postPasteShortcut()
+            }
         }
         return true
     }
@@ -671,6 +680,15 @@ final class SidePanelController: NSWindowController {
         let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         let options = [promptKey: true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
+    }
+
+    private func showPasteTargetUnavailableAlert() {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "内容已复制"
+        alert.informativeText = "没有找到刚才使用的应用，因此没有自动粘贴。请回到目标应用后按 ⌘V。"
+        alert.addButton(withTitle: "好")
+        alert.runModal()
     }
 
     private func showAccessibilityPermissionAlert() {
