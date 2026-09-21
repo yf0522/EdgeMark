@@ -1,3 +1,5 @@
+import ApplicationServices
+import Carbon
 import Cocoa
 import OSLog
 import SwiftUI
@@ -18,7 +20,8 @@ class KeyableWindow: NSWindow {
 // MARK: - SidePanelController
 
 final class SidePanelController: NSWindowController {
-    private let cornerRadius: CGFloat = 10
+    private static let cornerRadius: CGFloat = 16
+    private static let edgeInset: CGFloat = 14
     private(set) var isShown = false
     private var isAnimating = false
     private var animationGeneration = 0
@@ -40,6 +43,8 @@ final class SidePanelController: NSWindowController {
     init() {
         let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let panelWidth = PanelSettings.shared.panelWidth
+        let panelHeight = Self.resolvedPanelHeight(for: visibleFrame)
+        let panelY = visibleFrame.midY - panelHeight / 2
         let side = PanelSettings.shared.edgeSide
 
         // Park the window far off-screen so it can't overlap any monitor.
@@ -49,9 +54,9 @@ final class SidePanelController: NSWindowController {
         let window = KeyableWindow(
             contentRect: NSRect(
                 x: startX,
-                y: visibleFrame.minY,
+                y: panelY,
                 width: panelWidth,
-                height: visibleFrame.height,
+                height: panelHeight,
             ),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
@@ -67,7 +72,7 @@ final class SidePanelController: NSWindowController {
 
         // Container view — sits between the window and the SwiftUI hosting view so we can
         // layer the resize handle on top without interfering with SwiftUI layout.
-        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: visibleFrame.height))
+        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight))
 
         // Host SwiftUI content — fills the container
         let hostingView = NSHostingView(
@@ -80,7 +85,7 @@ final class SidePanelController: NSWindowController {
         hostingView.frame = containerView.bounds
         hostingView.autoresizingMask = [.width, .height]
         hostingView.wantsLayer = true
-        hostingView.layer?.cornerRadius = 10
+        hostingView.layer?.cornerRadius = Self.cornerRadius
         hostingView.layer?.maskedCorners = Self.maskedCorners(for: side)
         hostingView.layer?.masksToBounds = true
         containerView.addSubview(hostingView)
@@ -88,7 +93,7 @@ final class SidePanelController: NSWindowController {
         // Resize handle — thin strip on the inner edge
         let handle = ResizeHandleView()
         handle.side = side
-        handle.frame = Self.resizeHandleFrame(for: side, containerWidth: panelWidth, height: visibleFrame.height)
+        handle.frame = Self.resizeHandleFrame(for: side, containerWidth: panelWidth, height: panelHeight)
         handle.autoresizingMask = Self.resizeHandleAutoresizing(for: side)
         containerView.addSubview(handle)
 
@@ -200,6 +205,9 @@ final class SidePanelController: NSWindowController {
             if let fr = window.firstResponder as? NSTextView, fr.isFieldEditor {
                 return event
             }
+            if AppNavigation.shared.section == .clipboard {
+                return event
+            }
             if noteStore.selectedNote != nil || noteStore.showTrash {
                 return event
             }
@@ -226,6 +234,15 @@ final class SidePanelController: NSWindowController {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, isShown else { return event }
             let s = ShortcutSettings.shared
+
+            if AppNavigation.shared.section == .clipboard {
+                if s.pinShortcut?.matches(event) == true {
+                    PanelSettings.shared.isPanelPinned.toggle()
+                    return nil
+                }
+                return event
+            }
+
             if s.searchShortcut?.matches(event) == true {
                 // Trash overlay: pass through (navigateToHome while Trash is active leaves
                 // pendingSearchOnHome stuck).
@@ -626,6 +643,67 @@ final class SidePanelController: NSWindowController {
         }
     }
 
+    @discardableResult
+    func pasteClipboardItem(_ item: ClipboardHistoryItem) -> Bool {
+        ClipboardStore.shared.copy(item)
+
+        guard ensureAccessibilityPermission() else {
+            showAccessibilityPermissionAlert()
+            return false
+        }
+
+        hidePanel()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
+            Self.postPasteShortcut()
+        }
+        return true
+    }
+
+    private func ensureAccessibilityPermission() -> Bool {
+        if AXIsProcessTrusted() {
+            return true
+        }
+
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        let options = [promptKey: true] as CFDictionary
+        return AXIsProcessTrustedWithOptions(options)
+    }
+
+    private func showAccessibilityPermissionAlert() {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "需要“辅助功能”权限"
+        alert.informativeText = "内容已经复制到系统剪贴板。开启辅助功能权限后，双击剪贴板记录或按 Enter 即可自动粘贴到刚才使用的应用。"
+        alert.addButton(withTitle: "打开系统设置")
+        alert.addButton(withTitle: "稍后")
+
+        if alert.runModal() == .alertFirstButtonReturn,
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private static func postPasteShortcut() {
+        guard let source = CGEventSource(stateID: .combinedSessionState),
+              let keyDown = CGEvent(
+                  keyboardEventSource: source,
+                  virtualKey: CGKeyCode(kVK_ANSI_V),
+                  keyDown: true,
+              ),
+              let keyUp = CGEvent(
+                  keyboardEventSource: source,
+                  virtualKey: CGKeyCode(kVK_ANSI_V),
+                  keyDown: false,
+              )
+        else { return }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+    }
+
     // MARK: - Resize
 
     private func panelDidResize(to newWidth: CGFloat) {
@@ -658,36 +736,60 @@ final class SidePanelController: NSWindowController {
         NSRect(x: -panelWidth - 1000, y: -10000, width: panelWidth, height: 100)
     }
 
-    /// Returns (shown, hidden) frames for the given edge side using the persisted panel width.
+    /// Returns compact, vertically-centered floating frames for the configured edge.
     private func panelFrames(visibleFrame: NSRect, side: EdgeSide) -> (shown: NSRect, hidden: NSRect) {
         let width = PanelSettings.shared.panelWidth
+        let height = Self.resolvedPanelHeight(for: visibleFrame)
+        let y = visibleFrame.midY - height / 2
         let shown: NSRect
         let hidden: NSRect
+
         switch side {
         case .right:
-            shown = NSRect(x: visibleFrame.maxX - width, y: visibleFrame.minY,
-                           width: width, height: visibleFrame.height)
-            hidden = NSRect(x: visibleFrame.maxX, y: visibleFrame.minY,
-                            width: width, height: visibleFrame.height)
+            shown = NSRect(
+                x: visibleFrame.maxX - width - Self.edgeInset,
+                y: y,
+                width: width,
+                height: height,
+            )
+            hidden = NSRect(
+                x: visibleFrame.maxX + Self.edgeInset,
+                y: y,
+                width: width,
+                height: height,
+            )
         case .left:
-            shown = NSRect(x: visibleFrame.minX, y: visibleFrame.minY,
-                           width: width, height: visibleFrame.height)
-            hidden = NSRect(x: visibleFrame.minX - width, y: visibleFrame.minY,
-                            width: width, height: visibleFrame.height)
+            shown = NSRect(
+                x: visibleFrame.minX + Self.edgeInset,
+                y: y,
+                width: width,
+                height: height,
+            )
+            hidden = NSRect(
+                x: visibleFrame.minX - width - Self.edgeInset,
+                y: y,
+                width: width,
+                height: height,
+            )
         }
+
         return (shown, hidden)
     }
 
-    /// Corner mask for the given edge side.
-    private static func maskedCorners(for side: EdgeSide) -> CACornerMask {
-        switch side {
-        case .right:
-            // Right edge → round left corners
-            [.layerMinXMinYCorner, .layerMinXMaxYCorner]
-        case .left:
-            // Left edge → round right corners
-            [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
-        }
+    private static func resolvedPanelHeight(for visibleFrame: NSRect) -> CGFloat {
+        let preferred = PanelSettings.shared.panelHeight
+        let eightyPercent = visibleFrame.height * 0.80
+        let available = max(480, visibleFrame.height - 24)
+        return min(max(min(preferred, eightyPercent), 480), available)
+    }
+
+    private static func maskedCorners(for _: EdgeSide) -> CACornerMask {
+        [
+            .layerMinXMinYCorner,
+            .layerMaxXMinYCorner,
+            .layerMinXMaxYCorner,
+            .layerMaxXMaxYCorner,
+        ]
     }
 
     /// Frame of the resize handle within the container view.
