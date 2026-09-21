@@ -5,24 +5,15 @@ final class ClipboardSettings {
     static let shared = ClipboardSettings()
 
     var historyLimit: Int {
-        didSet {
-            historyLimit = min(max(historyLimit, 50), 2000)
-            persist(historyLimit, key: "clipboard.historyLimit")
-        }
+        didSet { persist(historyLimit, key: "clipboard.historyLimit") }
     }
 
     var imageLimit: Int {
-        didSet {
-            imageLimit = min(max(imageLimit, 10), 500)
-            persist(imageLimit, key: "clipboard.imageLimit")
-        }
+        didSet { persist(imageLimit, key: "clipboard.imageLimit") }
     }
 
     var imageCacheLimitMB: Int {
-        didSet {
-            imageCacheLimitMB = min(max(imageCacheLimitMB, 100), 4096)
-            persist(imageCacheLimitMB, key: "clipboard.imageCacheLimitMB")
-        }
+        didSet { persist(imageCacheLimitMB, key: "clipboard.imageCacheLimitMB") }
     }
 
     var recordImages: Bool {
