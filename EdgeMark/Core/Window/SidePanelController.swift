@@ -26,6 +26,7 @@ final class SidePanelController: NSWindowController {
     private var isAnimating = false
     private var animationGeneration = 0
     private var hideTimer: Timer?
+    private var mousePresenceTimer: Timer?
     private var dummyWindow: NSWindow?
     private var trackingArea: NSTrackingArea?
     private var previousApp: NSRunningApplication?
@@ -553,6 +554,8 @@ final class SidePanelController: NSWindowController {
             // Activate after animation is submitted to Core Animation
             NSApp.activate(ignoringOtherApps: true)
         }
+
+        startMousePresenceMonitoring()
     }
 
     func hidePanel(restoreFocus: Bool = true) {
@@ -564,6 +567,7 @@ final class SidePanelController: NSWindowController {
         let gen = animationGeneration &+ 1
         animationGeneration = gen
         cancelHideTimer()
+        stopMousePresenceMonitoring()
         edgeDetector.pauseDetection()
 
         let panelWidth = window.frame.width
@@ -862,10 +866,60 @@ final class SidePanelController: NSWindowController {
         return false
     }
 
+    private func startMousePresenceMonitoring() {
+        stopMousePresenceMonitoring()
+
+        mousePresenceTimer = Timer.scheduledTimer(
+            withTimeInterval: 0.12,
+            repeats: true,
+        ) { [weak self] _ in
+            self?.updateAutoHideForMousePosition()
+        }
+
+        if let mousePresenceTimer {
+            RunLoop.main.add(mousePresenceTimer, forMode: .common)
+        }
+    }
+
+    private func stopMousePresenceMonitoring() {
+        mousePresenceTimer?.invalidate()
+        mousePresenceTimer = nil
+    }
+
+    private func updateAutoHideForMousePosition() {
+        guard isShown,
+              !isAnimating,
+              !isEditorFocused,
+              PanelSettings.shared.autoHideOnMouseExit,
+              PanelSettings.shared.dismissalMode == .auto,
+              !PanelSettings.shared.isPanelPinned
+        else {
+            cancelHideTimer()
+            return
+        }
+
+        if isMouseInPanel() {
+            cancelHideTimer()
+            return
+        }
+
+        guard hideTimer == nil else { return }
+
+        let delay = PanelSettings.shared.hideDelay
+        if delay <= 0 {
+            hidePanel()
+        } else {
+            Log.window.debug("[SidePanelController] mouse outside — hide timer (\(delay)s)")
+            startHideTimer(delay: delay)
+        }
+    }
+
     private func startHideTimer(delay: Double) {
         cancelHideTimer()
         hideTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            guard let self, isShown, !isMouseInPanel() else { return }
+            guard let self else { return }
+            hideTimer = nil
+            guard isShown, !isMouseInPanel() else { return }
             hidePanel()
         }
     }
