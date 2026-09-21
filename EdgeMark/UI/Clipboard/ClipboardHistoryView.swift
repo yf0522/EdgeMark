@@ -408,32 +408,42 @@ private struct ClipboardHistoryRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            leadingPreview
+            HStack(alignment: .top, spacing: 10) {
+                leadingPreview
 
-            VStack(alignment: .leading, spacing: 6) {
-                contentPreview
+                VStack(alignment: .leading, spacing: 6) {
+                    contentPreview
 
-                HStack(spacing: 8) {
-                    Label(item.kind.displayName, systemImage: item.kind.systemImage)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-
-                    Text(relativeTime)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-
-                    if copied {
-                        Label("已复制", systemImage: "checkmark")
+                    HStack(spacing: 8) {
+                        Label(item.kind.displayName, systemImage: item.kind.systemImage)
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                            .foregroundStyle(.tertiary)
 
-                    if memoCreated {
-                        Label("已转备忘录", systemImage: "note.text")
+                        Text(relativeTime)
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.tertiary)
+
+                        if copied {
+                            Label("已复制", systemImage: "checkmark")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if memoCreated {
+                            Label("已转备忘录", systemImage: "note.text")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .overlay {
+                NativeClickCaptureView(
+                    onSingleClick: onCopy,
+                    onDoubleClick: onPaste,
+                )
             }
 
             VStack(spacing: 8) {
@@ -472,19 +482,6 @@ private struct ClipboardHistoryRow: View {
                 )
         }
         .padding(.horizontal, 8)
-        .contentShape(Rectangle())
-        .gesture(
-            TapGesture(count: 2)
-                .exclusively(before: TapGesture(count: 1))
-                .onEnded { value in
-                    switch value {
-                    case .first:
-                        onPaste()
-                    case .second:
-                        onCopy()
-                    }
-                },
-        )
         .contextMenu {
             Button("直接粘贴", systemImage: "doc.on.clipboard", action: onPaste)
             Button("复制", systemImage: "doc.on.doc", action: onCopy)
@@ -578,5 +575,68 @@ private struct ClipboardHistoryRow: View {
         formatter.locale = Locale(identifier: "zh_Hans_CN")
         formatter.unitsStyle = .short
         return formatter.localizedString(for: item.createdAt, relativeTo: Date())
+    }
+}
+
+
+private struct NativeClickCaptureView: NSViewRepresentable {
+    let onSingleClick: () -> Void
+    let onDoubleClick: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            onSingleClick: onSingleClick,
+            onDoubleClick: onDoubleClick,
+        )
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+
+        let doubleClick = NSClickGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleDoubleClick),
+        )
+        doubleClick.numberOfClicksRequired = 2
+        doubleClick.buttonMask = 0x1
+
+        let singleClick = NSClickGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleSingleClick),
+        )
+        singleClick.numberOfClicksRequired = 1
+        singleClick.buttonMask = 0x1
+        singleClick.require(toFail: doubleClick)
+
+        view.addGestureRecognizer(doubleClick)
+        view.addGestureRecognizer(singleClick)
+        return view
+    }
+
+    func updateNSView(_: NSView, context: Context) {
+        context.coordinator.onSingleClick = onSingleClick
+        context.coordinator.onDoubleClick = onDoubleClick
+    }
+
+    final class Coordinator: NSObject {
+        var onSingleClick: () -> Void
+        var onDoubleClick: () -> Void
+
+        init(
+            onSingleClick: @escaping () -> Void,
+            onDoubleClick: @escaping () -> Void,
+        ) {
+            self.onSingleClick = onSingleClick
+            self.onDoubleClick = onDoubleClick
+        }
+
+        @objc func handleSingleClick() {
+            onSingleClick()
+        }
+
+        @objc func handleDoubleClick() {
+            onDoubleClick()
+        }
     }
 }
