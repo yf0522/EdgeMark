@@ -226,8 +226,8 @@ final class ClipboardStore: NSObject {
         return thumbnail
     }
 
-    func applyRetentionPolicy() {
-        guard settings.autoCleanupEnabled else {
+    func applyRetentionPolicy(force: Bool = false) {
+        guard force || settings.autoCleanupEnabled else {
             save()
             return
         }
