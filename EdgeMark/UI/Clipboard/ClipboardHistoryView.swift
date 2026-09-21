@@ -132,6 +132,13 @@ struct ClipboardHistoryView: View {
             Spacer()
 
             HeaderIconButton(
+                systemName: "camera.viewfinder",
+                help: "区域截图"
+            ) {
+                ShortcutManager.shared.captureScreenshot()
+            }
+
+            HeaderIconButton(
                 systemName: store.sensitiveFilteringEnabled ? "shield.lefthalf.filled" : "shield.slash",
                 help: store.sensitiveFilteringEnabled ? "敏感内容过滤已开启" : "敏感内容过滤已关闭"
             ) {
