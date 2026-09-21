@@ -582,7 +582,7 @@ private struct NativeClickCaptureView: NSViewRepresentable {
     let onSingleClick: () -> Void
     let onDoubleClick: () -> Void
 
-    func makeNSView(context: Context) -> ClickCaptureNSView {
+    func makeNSView(context _: Context) -> ClickCaptureNSView {
         let view = ClickCaptureNSView()
         view.onSingleClick = onSingleClick
         view.onDoubleClick = onDoubleClick
