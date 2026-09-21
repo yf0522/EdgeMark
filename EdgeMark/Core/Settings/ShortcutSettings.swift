@@ -103,7 +103,7 @@ final class ShortcutSettings {
     )
     static let defaultCaptureScreenshot = KeyboardShortcut(
         keyCode: UInt16(kVK_ANSI_S),
-        modifiers: UInt32(controlKey | shiftKey)
+        modifiers: UInt32(controlKey | shiftKey),
     )
     static let defaultNewNote = KeyboardShortcut(keyCode: UInt16(kVK_ANSI_N), modifiers: UInt32(cmdKey))
     static let defaultNewFolder = KeyboardShortcut(keyCode: UInt16(kVK_ANSI_N), modifiers: UInt32(cmdKey | shiftKey))
