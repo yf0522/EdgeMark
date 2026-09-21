@@ -287,5 +287,6 @@
   "settings.clipboard.historyUsage": "Verlaufseinträge",
   "settings.clipboard.imageUsage": "Bild-Cache",
   "settings.clipboard.imageUsageValue": "{0} Bilder · {1}",
-  "settings.clipboard.cleanupNow": "Jetzt bereinigen"
+  "settings.clipboard.cleanupNow": "Jetzt bereinigen",
+  "settings.panelTint.midnight": "Mitternacht"
 }
