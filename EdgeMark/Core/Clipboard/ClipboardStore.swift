@@ -309,7 +309,7 @@ final class ClipboardStore: NSObject {
                     kind: .files,
                     text: paths.map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: ", "),
                     filePaths: paths,
-                )
+                ),
             )
         }
 
@@ -343,7 +343,7 @@ final class ClipboardStore: NSObject {
                     kind: .image,
                     text: "剪贴板图片",
                     assetFilename: filename,
-                )
+                ),
             )
         }
 
