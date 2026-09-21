@@ -578,7 +578,6 @@ private struct ClipboardHistoryRow: View {
     }
 }
 
-
 private struct NativeClickCaptureView: NSViewRepresentable {
     let onSingleClick: () -> Void
     let onDoubleClick: () -> Void
