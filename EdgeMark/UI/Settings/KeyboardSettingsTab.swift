@@ -6,6 +6,7 @@ struct KeyboardSettingsTab: View {
     /// Global shortcut
     @State private var toggleShortcut: KeyboardShortcut?
     @State private var openClipboardShortcut: KeyboardShortcut?
+    @State private var captureScreenshotShortcut: KeyboardShortcut?
 
     // Local configurable shortcuts
     @State private var newNoteShortcut: KeyboardShortcut?
@@ -20,6 +21,7 @@ struct KeyboardSettingsTab: View {
         let s = ShortcutSettings.shared
         _toggleShortcut = State(initialValue: s.togglePanelShortcut)
         _openClipboardShortcut = State(initialValue: s.openClipboardShortcut)
+        _captureScreenshotShortcut = State(initialValue: s.captureScreenshotShortcut)
         _newNoteShortcut = State(initialValue: s.newNoteShortcut)
         _newFolderShortcut = State(initialValue: s.newFolderShortcut)
         _searchShortcut = State(initialValue: s.searchShortcut)
@@ -53,6 +55,16 @@ struct KeyboardSettingsTab: View {
                 }
                 .onChange(of: openClipboardShortcut) { _, v in
                     ShortcutSettings.shared.openClipboardShortcut = v
+                }
+
+                HStack {
+                    Text(l10n["settings.keyboard.captureScreenshot"])
+                    Spacer()
+                    ShortcutRecorderView(shortcut: $captureScreenshotShortcut)
+                        .frame(width: 180, height: 32)
+                }
+                .onChange(of: captureScreenshotShortcut) { _, v in
+                    ShortcutSettings.shared.captureScreenshotShortcut = v
                 }
             } header: {
                 Label(l10n["settings.keyboard.globalShortcuts"], systemImage: "globe")
