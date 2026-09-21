@@ -146,7 +146,11 @@ final class ShortcutManager {
             return noErr
         case 3:
             Log.shortcuts.debug("[ShortcutManager] screenshot hotkey pressed")
-            captureScreenshot()
+            if let panelController {
+                panelController.captureScreenshot()
+            } else {
+                captureScreenshot()
+            }
             return noErr
         default:
             return OSStatus(eventNotHandledErr)
