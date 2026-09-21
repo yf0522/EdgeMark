@@ -1,27 +1,40 @@
 import SwiftUI
 
-/// Reusable empty state placeholder with icon, title, and subtitle.
+/// Reusable empty state placeholder with a compact productivity-card treatment.
 struct EmptyStateView: View {
     let icon: String
     let title: String
     var subtitle: String?
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             Spacer()
-            Image(systemName: icon)
-                .font(.system(size: 36))
-                .foregroundStyle(.tertiary)
+
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.10))
+                    .frame(width: 70, height: 70)
+
+                Image(systemName: icon)
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundStyle(Color.accentColor.opacity(0.88))
+            }
+
             Text(title)
                 .font(.headline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
+
             if let subtitle {
                 Text(subtitle)
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 260)
             }
+
             Spacer()
         }
+        .padding(.horizontal, 24)
         .frame(maxWidth: .infinity)
     }
 }
