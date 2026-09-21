@@ -4,7 +4,7 @@ import Foundation
 final class AppNavigation {
     static let shared = AppNavigation()
 
-    enum Section {
+    enum Section: Equatable {
         case memo
         case clipboard
     }
