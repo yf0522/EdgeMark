@@ -23,7 +23,7 @@ final class ShortcutManager {
             self,
             selector: #selector(shortcutSettingsChanged),
             name: .shortcutSettingsChanged,
-            object: nil
+            object: nil,
         )
     }
 
@@ -43,7 +43,7 @@ final class ShortcutManager {
                 shortcut,
                 id: 1,
                 ref: &togglePanelHotKeyRef,
-                label: "toggle panel"
+                label: "toggle panel",
             )
         }
 
@@ -52,7 +52,7 @@ final class ShortcutManager {
                 shortcut,
                 id: 2,
                 ref: &openClipboardHotKeyRef,
-                label: "open clipboard"
+                label: "open clipboard",
             )
         }
 
@@ -61,7 +61,7 @@ final class ShortcutManager {
                 shortcut,
                 id: 3,
                 ref: &captureScreenshotHotKeyRef,
-                label: "capture screenshot"
+                label: "capture screenshot",
             )
         }
     }
@@ -70,11 +70,11 @@ final class ShortcutManager {
         _ shortcut: KeyboardShortcut,
         id: UInt32,
         ref: inout EventHotKeyRef?,
-        label: String
+        label: String,
     ) {
         let hotKeyID = EventHotKeyID(
             signature: OSType(0x454D_524B),
-            id: id
+            id: id,
         )
 
         let status = RegisterEventHotKey(
@@ -83,14 +83,14 @@ final class ShortcutManager {
             hotKeyID,
             GetEventDispatcherTarget(),
             0,
-            &ref
+            &ref,
         )
 
         if status == noErr {
             Log.shortcuts.info("[ShortcutManager] registered \(label, privacy: .public)")
         } else {
             Log.shortcuts.error(
-                "[ShortcutManager] failed to register \(label, privacy: .public) (status: \(status))"
+                "[ShortcutManager] failed to register \(label, privacy: .public) (status: \(status))",
             )
         }
     }
@@ -100,7 +100,7 @@ final class ShortcutManager {
 
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
+            eventKind: UInt32(kEventHotKeyPressed),
         )
 
         InstallEventHandler(
@@ -115,7 +115,7 @@ final class ShortcutManager {
             1,
             &eventType,
             Unmanaged.passUnretained(self).toOpaque(),
-            &eventHandler
+            &eventHandler,
         )
     }
 
@@ -130,7 +130,7 @@ final class ShortcutManager {
             nil,
             MemoryLayout<EventHotKeyID>.size,
             nil,
-            &hotKeyID
+            &hotKeyID,
         )
         guard status == noErr else { return status }
 
