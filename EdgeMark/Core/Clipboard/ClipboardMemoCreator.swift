@@ -76,7 +76,7 @@ enum ClipboardMemoCreator {
             }
             return "剪贴板文件 \(timestamp(item.createdAt))"
         case .url:
-            if let host = URL(string: item.text)?.host(), !host.isEmpty {
+            if let host = URL(string: item.text)?.host, !host.isEmpty {
                 return "链接 · \(host)"
             }
             return "剪贴板链接 \(timestamp(item.createdAt))"
