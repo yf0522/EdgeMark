@@ -20,7 +20,9 @@ struct ClipboardHistoryView: View {
         case image = "图片"
         case files = "文件"
 
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
 
         var icon: String {
             switch self {
@@ -89,7 +91,7 @@ struct ClipboardHistoryView: View {
                                     onCreateMemo: { createMemo(from: item) },
                                     onTogglePin: { store.togglePin(item) },
                                     onToggleFavorite: { store.toggleFavorite(item) },
-                                    onDelete: { store.delete(item) }
+                                    onDelete: { store.delete(item) },
                                 )
 
                                 if item.id != filteredItems.last?.id {
@@ -133,21 +135,21 @@ struct ClipboardHistoryView: View {
 
             HeaderIconButton(
                 systemName: "camera.viewfinder",
-                help: "区域截图"
+                help: "区域截图",
             ) {
                 AppDelegate.shared?.panelController?.captureScreenshot()
             }
 
             HeaderIconButton(
                 systemName: store.sensitiveFilteringEnabled ? "shield.lefthalf.filled" : "shield.slash",
-                help: store.sensitiveFilteringEnabled ? "敏感内容过滤已开启" : "敏感内容过滤已关闭"
+                help: store.sensitiveFilteringEnabled ? "敏感内容过滤已开启" : "敏感内容过滤已关闭",
             ) {
                 store.sensitiveFilteringEnabled.toggle()
             }
 
             HeaderIconButton(
                 systemName: store.isMonitoring ? "pause.circle" : "play.circle",
-                help: store.isMonitoring ? "暂停自动记录" : "继续自动记录"
+                help: store.isMonitoring ? "暂停自动记录" : "继续自动记录",
             ) {
                 store.toggleMonitoring()
             }
@@ -194,7 +196,7 @@ struct ClipboardHistoryView: View {
                                     .fill(
                                         selectedFilter == filter
                                             ? Color.primary.opacity(0.12)
-                                            : Color.primary.opacity(0.04)
+                                            : Color.primary.opacity(0.04),
                                     )
                             }
                     }
@@ -359,12 +361,12 @@ private struct ClipboardHistoryRow: View {
             Button(
                 item.isFavorite ? "取消收藏" : "收藏",
                 systemImage: item.isFavorite ? "star.slash" : "star",
-                action: onToggleFavorite
+                action: onToggleFavorite,
             )
             Button(
                 item.isPinned ? "取消置顶" : "置顶",
                 systemImage: item.isPinned ? "pin.slash" : "pin",
-                action: onTogglePin
+                action: onTogglePin,
             )
 
             Divider()
@@ -401,7 +403,7 @@ private struct ClipboardHistoryRow: View {
                 ForEach(Array(item.filePaths.prefix(4)), id: \.self) { path in
                     Label(
                         URL(fileURLWithPath: path).lastPathComponent,
-                        systemImage: "doc"
+                        systemImage: "doc",
                     )
                     .font(.system(size: 13))
                     .lineLimit(1)
