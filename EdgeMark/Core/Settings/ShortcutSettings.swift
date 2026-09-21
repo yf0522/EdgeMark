@@ -99,7 +99,7 @@ final class ShortcutSettings {
 
     static let defaultOpenClipboard = KeyboardShortcut(
         keyCode: UInt16(kVK_ANSI_V),
-        modifiers: UInt32(controlKey | shiftKey)
+        modifiers: UInt32(controlKey | shiftKey),
     )
     static let defaultCaptureScreenshot = KeyboardShortcut(
         keyCode: UInt16(kVK_ANSI_S),
