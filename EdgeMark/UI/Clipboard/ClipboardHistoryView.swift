@@ -349,7 +349,7 @@ struct ClipboardHistoryView: View {
         guard let selectedItemID,
               let index = filteredItems.firstIndex(where: { $0.id == selectedItemID })
         else {
-            self.selectedItemID = offset >= 0 ? filteredItems.first?.id : filteredItems.last?.id
+            selectedItemID = offset >= 0 ? filteredItems.first?.id : filteredItems.last?.id
             return
         }
 
