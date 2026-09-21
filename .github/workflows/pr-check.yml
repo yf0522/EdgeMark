@@ -64,3 +64,21 @@ jobs:
         run: |
           xcodebuild -project EdgeMark.xcodeproj -scheme EdgeMark -configuration Release \
             -derivedDataPath build CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
+
+      - name: Create preview DMG
+        run: |
+          mkdir -p dmg
+          cp -R build/Build/Products/Release/EdgeMark.app dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "EdgeMark Preview" -srcfolder dmg -ov -format UDZO EdgeMark-preview-arm64.dmg
+          shasum -a 256 EdgeMark-preview-arm64.dmg > EdgeMark-preview-arm64.dmg.sha256
+
+      - name: Upload preview package
+        uses: actions/upload-artifact@v4
+        with:
+          name: EdgeMark-preview-arm64
+          path: |
+            EdgeMark-preview-arm64.dmg
+            EdgeMark-preview-arm64.dmg.sha256
+          if-no-files-found: error
+          retention-days: 14
