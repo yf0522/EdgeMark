@@ -108,7 +108,7 @@ final class ClipboardStore: NSObject {
     }
 
     var latestItem: ClipboardHistoryItem? {
-        orderedItems.first
+        items.max(by: { $0.createdAt < $1.createdAt })
     }
 
     var orderedItems: [ClipboardHistoryItem] {
@@ -166,10 +166,8 @@ final class ClipboardStore: NSObject {
     }
 
     func clearAll() {
-        for item in items {
-            removeAssetIfNeeded(for: item)
-        }
         items.removeAll()
+        try? FileManager.default.removeItem(at: assetsDirectory)
         save()
     }
 
