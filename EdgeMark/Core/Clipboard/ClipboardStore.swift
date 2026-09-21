@@ -48,7 +48,7 @@ struct ClipboardHistoryItem: Identifiable, Codable, Equatable {
         isPinned: Bool = false,
         isFavorite: Bool = false,
         filePaths: [String] = [],
-        assetFilename: String? = nil
+        assetFilename: String? = nil,
     ) {
         self.id = id
         self.kind = kind
@@ -125,7 +125,7 @@ final class ClipboardStore: NSObject {
         directorySize(assetsDirectory) + directorySize(thumbnailsDirectory)
     }
 
-    private override init() {
+    override private init() {
         lastChangeCount = NSPasteboard.general.changeCount
         super.init()
         load()
@@ -135,7 +135,7 @@ final class ClipboardStore: NSObject {
             self,
             selector: #selector(handleClipboardSettingsChanged),
             name: .clipboardSettingsChanged,
-            object: nil
+            object: nil,
         )
 
         startTimer()
@@ -245,7 +245,7 @@ final class ClipboardStore: NSObject {
             target: self,
             selector: #selector(timerFired(_:)),
             userInfo: nil,
-            repeats: true
+            repeats: true,
         )
         if let timer {
             RunLoop.main.add(timer, forMode: .common)
@@ -292,7 +292,7 @@ final class ClipboardStore: NSObject {
     private func captureFiles(from pasteboard: NSPasteboard) -> Bool {
         guard let objects = pasteboard.readObjects(
             forClasses: [NSURL.self],
-            options: [.urlReadingFileURLsOnly: true]
+            options: [.urlReadingFileURLsOnly: true],
         ) as? [NSURL] else { return false }
 
         let paths = objects.compactMap { url -> String? in
@@ -308,7 +308,7 @@ final class ClipboardStore: NSObject {
                 ClipboardHistoryItem(
                     kind: .files,
                     text: paths.map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: ", "),
-                    filePaths: paths
+                    filePaths: paths,
                 )
             )
         }
@@ -342,7 +342,7 @@ final class ClipboardStore: NSObject {
                 ClipboardHistoryItem(
                     kind: .image,
                     text: "剪贴板图片",
-                    assetFilename: filename
+                    assetFilename: filename,
                 )
             )
         }
@@ -409,7 +409,7 @@ final class ClipboardStore: NSObject {
         }
     }
 
-    private func oldestRemovableIndex<S: Sequence>(in indices: S) -> Int? where S.Element == Int {
+    private func oldestRemovableIndex(in indices: some Sequence<Int>) -> Int? {
         indices
             .filter { !items[$0].isPinned && !items[$0].isFavorite }
             .min { items[$0].createdAt < items[$1].createdAt }
@@ -421,10 +421,10 @@ final class ClipboardStore: NSObject {
 
         if item.kind == .image, let filename = item.assetFilename {
             try? FileManager.default.removeItem(
-                at: assetsDirectory.appendingPathComponent(filename)
+                at: assetsDirectory.appendingPathComponent(filename),
             )
             try? FileManager.default.removeItem(
-                at: thumbnailURL(forAssetFilename: filename)
+                at: thumbnailURL(forAssetFilename: filename),
             )
             thumbnailCache.removeObject(forKey: filename as NSString)
         }
@@ -443,11 +443,11 @@ final class ClipboardStore: NSObject {
         let scale = min(
             maxDimension / sourceSize.width,
             maxDimension / sourceSize.height,
-            1
+            1,
         )
         let targetSize = NSSize(
             width: max(1, sourceSize.width * scale),
-            height: max(1, sourceSize.height * scale)
+            height: max(1, sourceSize.height * scale),
         )
 
         let thumbnail = NSImage(size: targetSize)
@@ -457,7 +457,7 @@ final class ClipboardStore: NSObject {
             in: NSRect(origin: .zero, size: targetSize),
             from: NSRect(origin: .zero, size: sourceSize),
             operation: .copy,
-            fraction: 1
+            fraction: 1,
         )
         thumbnail.unlockFocus()
         return thumbnail
@@ -471,11 +471,11 @@ final class ClipboardStore: NSObject {
 
         try? FileManager.default.createDirectory(
             at: thumbnailsDirectory,
-            withIntermediateDirectories: true
+            withIntermediateDirectories: true,
         )
         try? data.write(
             to: thumbnailURL(forAssetFilename: filename),
-            options: .atomic
+            options: .atomic,
         )
     }
 
@@ -492,7 +492,7 @@ final class ClipboardStore: NSObject {
     private var applicationSupportDirectory: URL {
         let base = FileManager.default.urls(
             for: .applicationSupportDirectory,
-            in: .userDomainMask
+            in: .userDomainMask,
         ).first ?? FileManager.default.temporaryDirectory
         let directory = base.appendingPathComponent("EdgeMark", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -521,7 +521,7 @@ final class ClipboardStore: NSObject {
         guard let enumerator = FileManager.default.enumerator(
             at: directory,
             includingPropertiesForKeys: [.fileSizeKey],
-            options: [.skipsHiddenFiles]
+            options: [.skipsHiddenFiles],
         ) else { return 0 }
 
         var total: Int64 = 0
