@@ -582,60 +582,50 @@ private struct NativeClickCaptureView: NSViewRepresentable {
     let onSingleClick: () -> Void
     let onDoubleClick: () -> Void
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(
-            onSingleClick: onSingleClick,
-            onDoubleClick: onDoubleClick,
-        )
-    }
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.wantsLayer = true
-
-        let doubleClick = NSClickGestureRecognizer(
-            target: context.coordinator,
-            action: #selector(Coordinator.handleDoubleClick),
-        )
-        doubleClick.numberOfClicksRequired = 2
-        doubleClick.buttonMask = 0x1
-
-        let singleClick = NSClickGestureRecognizer(
-            target: context.coordinator,
-            action: #selector(Coordinator.handleSingleClick),
-        )
-        singleClick.numberOfClicksRequired = 1
-        singleClick.buttonMask = 0x1
-        singleClick.require(toFail: doubleClick)
-
-        view.addGestureRecognizer(doubleClick)
-        view.addGestureRecognizer(singleClick)
+    func makeNSView(context: Context) -> ClickCaptureNSView {
+        let view = ClickCaptureNSView()
+        view.onSingleClick = onSingleClick
+        view.onDoubleClick = onDoubleClick
         return view
     }
 
-    func updateNSView(_: NSView, context: Context) {
-        context.coordinator.onSingleClick = onSingleClick
-        context.coordinator.onDoubleClick = onDoubleClick
+    func updateNSView(_ nsView: ClickCaptureNSView, context _: Context) {
+        nsView.onSingleClick = onSingleClick
+        nsView.onDoubleClick = onDoubleClick
+    }
+}
+
+private final class ClickCaptureNSView: NSView {
+    var onSingleClick: (() -> Void)?
+    var onDoubleClick: (() -> Void)?
+    private var pendingSingleClick: DispatchWorkItem?
+
+    override func mouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 0 else {
+            super.mouseDown(with: event)
+            return
+        }
+
+        if event.clickCount >= 2 {
+            pendingSingleClick?.cancel()
+            pendingSingleClick = nil
+            onDoubleClick?()
+            return
+        }
+
+        pendingSingleClick?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.onSingleClick?()
+            self?.pendingSingleClick = nil
+        }
+        pendingSingleClick = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + NSEvent.doubleClickInterval,
+            execute: workItem,
+        )
     }
 
-    final class Coordinator: NSObject {
-        var onSingleClick: () -> Void
-        var onDoubleClick: () -> Void
-
-        init(
-            onSingleClick: @escaping () -> Void,
-            onDoubleClick: @escaping () -> Void,
-        ) {
-            self.onSingleClick = onSingleClick
-            self.onDoubleClick = onDoubleClick
-        }
-
-        @objc func handleSingleClick() {
-            onSingleClick()
-        }
-
-        @objc func handleDoubleClick() {
-            onDoubleClick()
-        }
+    override func acceptsFirstMouse(for _: NSEvent?) -> Bool {
+        true
     }
 }
