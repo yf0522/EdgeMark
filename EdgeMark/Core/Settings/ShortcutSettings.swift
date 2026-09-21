@@ -59,6 +59,10 @@ final class ShortcutSettings {
         didSet { save(shortcut: togglePanelShortcut, forKey: togglePanelKey) }
     }
 
+    var openClipboardShortcut: KeyboardShortcut? {
+        didSet { save(shortcut: openClipboardShortcut, forKey: openClipboardKey) }
+    }
+
     var newNoteShortcut: KeyboardShortcut? {
         didSet { save(shortcut: newNoteShortcut, forKey: newNoteKey) }
     }
@@ -89,6 +93,10 @@ final class ShortcutSettings {
 
     // MARK: - Defaults
 
+    static let defaultOpenClipboard = KeyboardShortcut(
+        keyCode: UInt16(kVK_ANSI_V),
+        modifiers: UInt32(controlKey | shiftKey)
+    )
     static let defaultNewNote = KeyboardShortcut(keyCode: UInt16(kVK_ANSI_N), modifiers: UInt32(cmdKey))
     static let defaultNewFolder = KeyboardShortcut(keyCode: UInt16(kVK_ANSI_N), modifiers: UInt32(cmdKey | shiftKey))
     static let defaultSearch = KeyboardShortcut(keyCode: UInt16(kVK_ANSI_F), modifiers: UInt32(cmdKey))
@@ -104,6 +112,7 @@ final class ShortcutSettings {
         // Configurable shortcuts — check live values
         let configurable: [(String, KeyboardShortcut?)] = [
             ("settings.keyboard.togglePanel", togglePanelShortcut),
+            ("settings.keyboard.openClipboard", openClipboardShortcut),
             ("settings.keyboard.newNote", newNoteShortcut),
             ("settings.keyboard.newFolder", newFolderShortcut),
             ("settings.keyboard.search", searchShortcut),
@@ -136,11 +145,14 @@ final class ShortcutSettings {
         ("settings.keyboard.inlineCode", KeyboardShortcut(keyCode: UInt16(kVK_ANSI_E), modifiers: UInt32(cmdKey))),
         ("settings.keyboard.link", KeyboardShortcut(keyCode: UInt16(kVK_ANSI_K), modifiers: UInt32(cmdKey))),
         ("settings.keyboard.strikethrough", KeyboardShortcut(keyCode: UInt16(kVK_ANSI_X), modifiers: UInt32(cmdKey | shiftKey))),
+        ("settings.keyboard.memoSection", KeyboardShortcut(keyCode: UInt16(kVK_ANSI_1), modifiers: UInt32(cmdKey))),
+        ("settings.keyboard.clipboardSection", KeyboardShortcut(keyCode: UInt16(kVK_ANSI_2), modifiers: UInt32(cmdKey))),
     ]
 
     // MARK: - Keys
 
     private let togglePanelKey = "togglePanelShortcut"
+    private let openClipboardKey = "openClipboardShortcut"
     private let newNoteKey = "newNoteShortcut"
     private let newFolderKey = "newFolderShortcut"
     private let searchKey = "searchShortcut"
@@ -168,6 +180,7 @@ final class ShortcutSettings {
     private func loadShortcuts() {
         let toggleDefault = KeyboardShortcut(keyCode: UInt16(kVK_Space), modifiers: UInt32(controlKey | shiftKey))
         togglePanelShortcut = load(forKey: togglePanelKey, default: toggleDefault)
+        openClipboardShortcut = load(forKey: openClipboardKey, default: Self.defaultOpenClipboard)
     }
 
     private func loadLocalShortcuts() {
