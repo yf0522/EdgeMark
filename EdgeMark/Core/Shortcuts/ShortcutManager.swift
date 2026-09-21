@@ -8,6 +8,7 @@ final class ShortcutManager {
 
     private var togglePanelHotKeyRef: EventHotKeyRef?
     private var openClipboardHotKeyRef: EventHotKeyRef?
+    private var captureScreenshotHotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
 
     private weak var panelController: SidePanelController?
@@ -52,6 +53,15 @@ final class ShortcutManager {
                 id: 2,
                 ref: &openClipboardHotKeyRef,
                 label: "open clipboard"
+            )
+        }
+
+        if let shortcut = ShortcutSettings.shared.captureScreenshotShortcut {
+            register(
+                shortcut,
+                id: 3,
+                ref: &captureScreenshotHotKeyRef,
+                label: "capture screenshot"
             )
         }
     }
@@ -134,8 +144,23 @@ final class ShortcutManager {
             AppNavigation.shared.showClipboard()
             panelController?.showPanel()
             return noErr
+        case 3:
+            Log.shortcuts.debug("[ShortcutManager] screenshot hotkey pressed")
+            captureInteractiveScreenshot()
+            return noErr
         default:
             return OSStatus(eventNotHandledErr)
+        }
+    }
+
+    private func captureInteractiveScreenshot() {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-i", "-c"]
+        do {
+            try process.run()
+        } catch {
+            Log.shortcuts.error("[ShortcutManager] failed to launch screencapture: \(error)")
         }
     }
 
@@ -148,6 +173,11 @@ final class ShortcutManager {
         if let openClipboardHotKeyRef {
             UnregisterEventHotKey(openClipboardHotKeyRef)
             self.openClipboardHotKeyRef = nil
+        }
+
+        if let captureScreenshotHotKeyRef {
+            UnregisterEventHotKey(captureScreenshotHotKeyRef)
+            self.captureScreenshotHotKeyRef = nil
         }
 
         if let eventHandler {
